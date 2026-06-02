@@ -73,6 +73,8 @@ const itemsFilterInput = document.getElementById('itemsFilterInput');
 const newItemBtn = document.getElementById('newItemBtn');
 const renameItemBtn = document.getElementById('renameItemBtn');
 const sortItemsBtn = document.getElementById('sortItemsBtn');
+const sortItemsAzBtn = document.getElementById('sortItemsAzBtn');
+const sortItemsStatusBtn = document.getElementById('sortItemsStatusBtn');
 const checkItemsBtn = document.getElementById('checkItemsBtn');
 const moveItemsBtn = document.getElementById('moveItemsBtn');
 const groupDropdown = document.getElementById('groupDropdown');
@@ -1024,6 +1026,41 @@ function sortItemsAlphabetically() {
     renderItems();
 }
 
+function getStatusSortWeight(status) {
+    const value = normalizeChannelStatus(status);
+    const code = Number(value);
+
+    if (value === 'Checking') return 10;
+    if (value === 'Queued') return 20;
+    if (code >= 200 && code < 300) return 30;
+    if (code >= 300 && code < 400) return 40;
+    if (code === 401 || code === 403 || code === 408 || code === 429 || code === 451) return 50;
+    if (code >= 400 && code < 500) return 60;
+    if (code >= 500 && code < 600) return 70;
+    if (value === 'CORS') return 80;
+    if (value === 'No URL' || value === 'Bad URL' || value === 'Unsupported' || value === 'Blocked') return 90;
+    if (value === STATUS_UNKNOWN) return 100;
+    return 110;
+}
+
+function sortItemsByStatus() {
+    if (!selectedGroup) return;
+
+    const groupItems = getGroupItems(selectedGroup).slice().sort((a, b) => {
+        const weightDiff = getStatusSortWeight(a.status) - getStatusSortWeight(b.status);
+        if (weightDiff) return weightDiff;
+
+        const statusDiff = getStatusLabel(a).localeCompare(getStatusLabel(b), undefined, { numeric: true, sensitivity: 'base' });
+        if (statusDiff) return statusDiff;
+
+        return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+    });
+
+    replaceGroupItems(selectedGroup, groupItems);
+    saveToLocalStorage();
+    renderItems();
+}
+
 function updateGroupsOrder(evt) {
     if (!evt) return;
 
@@ -1190,47 +1227,46 @@ async function checkChannelItems(items, emptyMessage, finishedLabel) {
     isCheckingChannels = true;
     updateActionState();
 
-    const candidates = [];
-    targets.forEach(item => {
+    const candidates = targets.map(item => {
         ensureItem(item);
-        const url = String(item.url || '').trim();
-        item.lastChecked = new Date().toLocaleString();
-
-        if (!url) {
-            item.status = 'No URL';
-            item.statusDetail = getStatusDescription('No URL');
-            return;
-        }
-
-        if (!isValidUrl(url)) {
-            item.status = 'Bad URL';
-            item.statusDetail = getStatusDescription('Bad URL');
-            return;
-        }
-
-        if (!isHttpUrl(url)) {
-            item.status = 'Unsupported';
-            item.statusDetail = getStatusDescription('Unsupported');
-            return;
-        }
-
-        item.status = 'Checking';
-        item.statusDetail = getStatusDescription('Checking');
-        candidates.push(item);
+        item.status = 'Queued';
+        item.statusDetail = getStatusDescription('Queued');
+        item.lastChecked = '';
+        return item;
     });
 
-    setProgress(candidates.length
-        ? `Checking ${candidates.length} selected channel${candidates.length === 1 ? '' : 's'}...`
-        : 'Selected channels have no checkable HTTP or HTTPS URL.');
+    const label = finishedLabel || 'selected channels';
+    const total = candidates.length;
+    const batchSize = 5;
+
+    setProgress(`Queued ${total} ${label}. Checking 5 at a time.`);
     saveToLocalStorage();
     renderItems();
 
-    await Promise.all(candidates.map(item => checkSingleChannel(item)));
+    for (let start = 0; start < total; start += batchSize) {
+        const batch = candidates.slice(start, start + batchSize);
+        const batchStart = start + 1;
+        const batchEnd = start + batch.length;
+
+        batch.forEach(item => {
+            item.status = 'Checking';
+            item.statusDetail = getStatusDescription('Checking');
+            item.lastChecked = new Date().toLocaleString();
+        });
+
+        setProgress(`Checking ${batchStart}-${batchEnd} of ${total}. ${Math.max(total - batchEnd, 0)} queued.`);
+        saveToLocalStorage();
+        renderItems();
+
+        await Promise.all(batch.map(item => checkSingleChannel(item)));
+
+        setProgress(`Checked ${batchEnd} of ${total}. ${Math.max(total - batchEnd, 0)} queued.`);
+        saveToLocalStorage();
+        renderItems();
+    }
 
     isCheckingChannels = false;
-    setProgress(candidates.length
-        ? `Finished checking ${candidates.length} selected channel${candidates.length === 1 ? '' : 's'}.`
-        : 'Selected channels have no checkable HTTP or HTTPS URL.');
+    setProgress(`Finished checking ${total} ${label}.`);
     saveToLocalStorage();
     renderItems();
     updateActionState();
@@ -1570,7 +1606,14 @@ deleteGroupsBtn.addEventListener('click', deleteSelectedGroups);
 
 newItemBtn.addEventListener('click', createNewItem);
 renameItemBtn.addEventListener('click', startSelectedItemRename);
-sortItemsBtn.addEventListener('click', sortItemsAlphabetically);
+if (sortItemsAzBtn) sortItemsAzBtn.addEventListener('click', event => {
+    event.preventDefault();
+    sortItemsAlphabetically();
+});
+if (sortItemsStatusBtn) sortItemsStatusBtn.addEventListener('click', event => {
+    event.preventDefault();
+    sortItemsByStatus();
+});
 checkItemsBtn.addEventListener('click', checkChannels);
 if (checkCurrentItemBtn) checkCurrentItemBtn.addEventListener('click', checkCurrentItem);
 deleteItemsBtn.addEventListener('click', deleteSelectedItems);
