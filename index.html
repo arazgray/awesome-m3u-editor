@@ -3,80 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Awesome M3U Editor</title>
+    <title>Awesome M3U Editor 2.0</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.css" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="shortcut icon" href="icon.png" type="image/x-icon">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body>
     <div class="container-fluid p-3">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4>⇅ Awesome M3U Editor</h4>
-            <div class="d-flex align-items-center gap-2">
+        <header class="app-header d-flex justify-content-between align-items-start gap-3 mb-3">
+            <div>
+                <h4 class="mb-1">⇅ Awesome M3U Editor 2.0</h4>
+                <div class="text-muted small">Free, Private, local, browser-based M3U and M3U8 playlist editor.</div>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap justify-content-center">
                 <input type="file" id="fileInput" class="form-control" accept=".m3u,.m3u8" style="max-width: 250px;">
                 <button id="downloadBtn" class="btn btn-primary" disabled>Download Modified M3U</button>
-                <button id="clearBtn" class="btn btn-danger">Clear</button>
+                <button id="clearBtn" class="btn btn-outline-danger">Clear</button>
             </div>
-            <div class="text-end small">
-                <div>Copyright &copy; 2025 - ⇅ Awesome M3U Editor</div>
-                <div>Made with ❤️ By <a target="_blank" href="https://github.com/arazgholami/">@arazgholami</a></div>
-                <div><a href="https://github.com/arazgholami/awesome-m3u-editor" target="_blank">Star it on Github</a></div>
+            <div class="text-end small app-meta">
+                <div>Copyright &copy; 2026 - ⇅ Awesome M3U Editor</div>
+                <div>Made with ❤️ By <a target="_blank" rel="noopener" href="https://github.com/arazgholami/">@arazgholami</a></div>
+                <div><a href="https://github.com/arazgholami/awesome-m3u-editor" target="_blank" rel="noopener">⭐ Star it on Github</a></div>
             </div>
-        </div>
+        </header>
+
+        <section class="border p-2 mb-2 bg-white">
+            <label for="playlistHeaderInput" class="form-label small fw-semibold mb-1">Playlist header</label>
+            <input id="playlistHeaderInput" type="text" class="form-control form-control-sm font-monospace" value="#EXTM3U" placeholder="#EXTM3U x-tvg-url=&quot;https://example.com/epg.xml&quot; url-tvg=&quot;https://example.com/epg.xml&quot;">
+            <div class="form-text small">Edit the first line of the playlist here. EPG and global catchup attributes are preserved when loading and downloading. <i style="color:orange">Don't touch it if you don't know what it is.</i></div>
+        </section>
         
-        <div class="row g-2">
-            <!-- Groups Section -->
-            <div class="col-md-3">
-                <div class="border p-2 h-100 d-flex flex-column">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="mb-0">Groups</h6>
-                        <div class="d-flex gap-1">
+        <main class="row g-2">
+            <section class="col-lg-3 col-md-4">
+                <div class="border p-2 h-100 d-flex flex-column bg-white">
+                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
+                        <h6 class="mb-0">Groups <span id="groupSelectedCount" class="text-muted fw-normal"></span></h6>
+                        <div class="d-flex gap-1 flex-wrap">
                             <button id="newGroupBtn" class="btn btn-sm btn-outline-success">New</button>
+                            <button id="renameGroupBtn" class="btn btn-sm btn-outline-secondary" disabled>Rename</button>
+                            <button id="sortGroupsBtn" class="btn btn-sm btn-outline-secondary">Sort A-Z</button>
                             <button id="deleteGroupsBtn" class="btn btn-sm btn-outline-danger" disabled>Delete</button>
                         </div>
                     </div>
                     <div class="mb-2">
                         <input id="groupsFilterInput" type="text" class="form-control form-control-sm" placeholder="Filter groups...">
                     </div>
-                    <div id="groupsList" class="list-group">
-                        <!-- Groups will be populated here -->
+                    <div class="section-hint small text-muted mb-2">Ctrl/Cmd-click selects many. Shift-click selects a range. Drag selected rows to reorder.</div>
+                    <div id="groupsList" class="list-group flex-grow-1">
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Items Section -->
-            <div class="col-md-4">
-                <div class="border p-2 h-100 d-flex flex-column">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="mb-0">Channels</h6>
-                        <div class="d-flex gap-1">
-                            <button id="newItemBtn" class="btn btn-sm btn-outline-success">New Item</button>
-                            <button id="sortItemsBtn" class="btn btn-sm btn-outline-secondary">Sort A-Z</button>
+            <section class="col-lg-4 col-md-8">
+                <div class="border p-2 h-100 d-flex flex-column bg-white">
+                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
+                        <h6 class="mb-0">Channels <span id="itemSelectedCount" class="text-muted fw-normal"></span></h6>
+                        <div class="d-flex gap-1 flex-wrap">
+                            <button id="newItemBtn" class="btn btn-sm btn-outline-success" disabled>New Item</button>
+                            <button id="renameItemBtn" class="btn btn-sm btn-outline-secondary" disabled>Rename</button>
+                            <button id="sortItemsBtn" class="btn btn-sm btn-outline-secondary" disabled>Sort A-Z</button>
+                            <button id="checkItemsBtn" class="btn btn-sm btn-outline-warning" disabled>Check</button>
                             <div class="dropdown">
                                 <button id="moveItemsBtn" class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" disabled>
                                     Move
                                 </button>
                                 <ul id="groupDropdown" class="dropdown-menu">
-                                    <!-- Groups will be populated here -->
                                 </ul>
                             </div>
                             <button id="deleteItemsBtn" class="btn btn-sm btn-outline-danger" disabled>Delete</button>
                         </div>
                     </div>
                     <div class="mb-2">
-                        <input id="itemsFilterInput" type="text" class="form-control form-control-sm" placeholder="Filter items...">
+                        <input id="itemsFilterInput" type="text" class="form-control form-control-sm" placeholder="Filter channels...">
                     </div>
+                    <div class="section-hint small text-muted mb-2">Rename works by button or double click. Select channels, then use Check to test only those URLs.</div>
                     <div id="itemsList" class="list-group flex-grow-1 overflow-auto">
-                        <!-- Items will be populated here -->
+                    </div>
+                    <div id="statusCheckProgress" class="status-progress small mt-2" aria-live="polite"></div>
+                    <div class="status-legend small text-muted mt-2">
+                        <div><span class="status-badge status-ok">200</span> fine and reachable.</div>
+                        <div><span class="status-badge status-warning">403</span> not accessible by you, possibly account, token, or geo-limited.</div>
+                        <div><span class="status-badge status-bad">404</span> not found. <span class="status-badge status-bad">5xx</span> provider/server error.</div>
+                        <div><span class="status-badge status-neutral">CORS</span> browser could reach it, but cannot read the real status without server permission.</div>
+                        <div>Select one or more channels first. The list button checks selected channels only.</div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Item Details Section -->
-            <div class="col-md-5">
-                <div class="border p-3 h-100">
+            <section class="col-lg-5 col-md-12">
+                <div class="border p-3 h-100 bg-white">
                     <h6>Channel Details</h6>
                     <form id="itemDetailsForm" class="needs-validation" novalidate>
                         <input type="hidden" id="itemIndex">
@@ -88,12 +104,22 @@
                         </div>
                         <div class="mb-2 row g-2">
                             <label class="col-sm-3 col-form-label d-flex justify-content-between align-items-center">URL:
-                                <a id="itemUrlPreview" href="#" target="_blank" class="ms-2 text-decoration-none" title="Preview">
+                                <a id="itemUrlPreview" href="#" target="_blank" rel="noopener" class="ms-2 text-decoration-none disabled" title="Preview">
                                     <span class="bi bi-box-arrow-up-right"></span> Preview
                                 </a>
                             </label>
                             <div class="col-sm-9">
                                 <input type="text" class="form-control form-control-sm" id="itemUrl" required>
+                            </div>
+                        </div>
+                        <div class="mb-2 row g-2">
+                            <label class="col-sm-3 col-form-label">Status:</label>
+                            <div class="col-sm-9">
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control form-control-sm" id="itemStatus" value="Unknown" readonly>
+                                    <button type="button" id="checkCurrentItemBtn" class="btn btn-outline-warning" disabled>Check</button>
+                                </div>
+                                <div id="itemStatusDescription" class="form-text small">Unknown. This channel has not been checked yet.</div>
                             </div>
                         </div>
                         <div class="mb-2 row g-2">
@@ -122,17 +148,41 @@
                                         <span id="itemGroupTitleSelected">Select group</span>
                                     </button>
                                     <ul id="itemGroupTitleDropdownMenu" class="dropdown-menu w-100">
-                                        <!-- Groups will be populated here -->
                                     </ul>
                                 </div>
                                 <input type="hidden" class="form-control form-control-sm" id="itemGroupTitle">
                             </div>
                         </div>
+                        <div class="mb-2 row g-2">
+                            <label class="col-sm-3 col-form-label">Catchup:</label>
+                            <div class="col-sm-9">
+                                <input type="text" class="form-control form-control-sm" id="itemCatchup" placeholder="shift, default, append, or a catchup source">
+                            </div>
+                        </div>
+                        <div class="mb-2 row g-2">
+                            <label class="col-sm-3 col-form-label">Catchup Type:</label>
+                            <div class="col-sm-9">
+                                <input type="text" class="form-control form-control-sm" id="itemCatchupType" placeholder="flussonic, xtream, default...">
+                            </div>
+                        </div>
+                        <div class="mb-2 row g-2">
+                            <label class="col-sm-3 col-form-label">Catchup Days:</label>
+                            <div class="col-sm-9">
+                                <input type="number" min="0" class="form-control form-control-sm" id="itemCatchupDays" placeholder="7">
+                            </div>
+                        </div>
+                        <div class="mb-2 row g-2">
+                            <label class="col-sm-3 col-form-label">Extra Attributes:</label>
+                            <div class="col-sm-9">
+                                <textarea class="form-control form-control-sm font-monospace" id="itemAdditionalAttrs" rows="2" placeholder="catchup-source=&quot;?utc={utc}&amp;lutc={lutc}&quot; timeshift=&quot;7&quot;"></textarea>
+                                <div class="form-text small">Unknown channel attributes are preserved here, so provider archive parameters are not lost.</div>
+                            </div>
+                        </div>
                         <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
                     </form>
                 </div>
-            </div>
-        </div>
+            </section>
+        </main>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>

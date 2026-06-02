@@ -1,331 +1,1254 @@
 let m3uData = [];
+let groupOrder = [];
+let playlistHeader = '#EXTM3U';
 let selectedGroup = null;
-let selectedItems = new Set();
+let selectedGroups = new Set();
 let selectedGroupItems = [];
+let selectedChannels = new Set();
+let activeChannelId = null;
 let renamingGroup = null;
-let renamingItemIndex = null;
+let renamingItemId = null;
+let groupSelectionAnchor = null;
+let itemSelectionAnchorId = null;
+let nextItemId = 1;
+let isCheckingChannels = false;
+let checkingProgressText = '';
+
+const STATUS_UNKNOWN = 'Unknown';
+const STORAGE_KEY = 'awesomeM3uEditorProject';
+const LEGACY_DATA_KEY = 'm3uData';
+const LEGACY_HEADER_KEY = 'm3uHeader';
+const NO_GROUP = 'No Group';
+
+
+function getStorageItem(key) {
+    try {
+        return window.localStorage ? window.localStorage.getItem(key) : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function setStorageItem(key, value) {
+    try {
+        if (window.localStorage) window.localStorage.setItem(key, value);
+    } catch (error) {
+        console.warn('Could not save to local storage:', error);
+    }
+}
+
+function removeStorageItem(key) {
+    try {
+        if (window.localStorage) window.localStorage.removeItem(key);
+    } catch (error) {
+        console.warn('Could not remove local storage item:', error);
+    }
+}
+
+const knownAttributeKeys = new Set([
+    'tvg-id',
+    'tvg-name',
+    'tvg-logo',
+    'group-title',
+    'catchup',
+    'catchup-type',
+    'catchup-days'
+]);
 
 const fileInput = document.getElementById('fileInput');
 const downloadBtn = document.getElementById('downloadBtn');
-const groupsList = document.getElementById('groupsList');
-const itemsList = document.getElementById('itemsList');
-const itemDetailsForm = document.getElementById('itemDetailsForm');
-const sortItemsBtn = document.getElementById('sortItemsBtn');
 const clearBtn = document.getElementById('clearBtn');
+const playlistHeaderInput = document.getElementById('playlistHeaderInput');
 
-const itemGroupTitleDropdown = document.getElementById('itemGroupTitleDropdown');
-const itemGroupTitleDropdownMenu = document.getElementById('itemGroupTitleDropdownMenu');
-const itemGroupTitleSelected = document.getElementById('itemGroupTitleSelected');
-const itemGroupTitleInput = document.getElementById('itemGroupTitle');
+const groupsList = document.getElementById('groupsList');
+const groupsFilterInput = document.getElementById('groupsFilterInput');
+const newGroupBtn = document.getElementById('newGroupBtn');
+const renameGroupBtn = document.getElementById('renameGroupBtn');
+const sortGroupsBtn = document.getElementById('sortGroupsBtn');
+const deleteGroupsBtn = document.getElementById('deleteGroupsBtn');
+const groupSelectedCount = document.getElementById('groupSelectedCount');
 
+const itemsList = document.getElementById('itemsList');
+const itemsFilterInput = document.getElementById('itemsFilterInput');
+const newItemBtn = document.getElementById('newItemBtn');
+const renameItemBtn = document.getElementById('renameItemBtn');
+const sortItemsBtn = document.getElementById('sortItemsBtn');
+const checkItemsBtn = document.getElementById('checkItemsBtn');
+const moveItemsBtn = document.getElementById('moveItemsBtn');
+const groupDropdown = document.getElementById('groupDropdown');
+const deleteItemsBtn = document.getElementById('deleteItemsBtn');
+const itemSelectedCount = document.getElementById('itemSelectedCount');
+const statusCheckProgress = document.getElementById('statusCheckProgress');
+
+const itemDetailsForm = document.getElementById('itemDetailsForm');
 const itemIndexInput = document.getElementById('itemIndex');
 const itemNameInput = document.getElementById('itemName');
 const itemUrlInput = document.getElementById('itemUrl');
 const itemTvgIdInput = document.getElementById('itemTvgId');
 const itemTvgNameInput = document.getElementById('itemTvgName');
 const itemTvgLogoInput = document.getElementById('itemTvgLogo');
+const itemCatchupInput = document.getElementById('itemCatchup');
+const itemCatchupTypeInput = document.getElementById('itemCatchupType');
+const itemCatchupDaysInput = document.getElementById('itemCatchupDays');
+const itemAdditionalAttrsInput = document.getElementById('itemAdditionalAttrs');
+const itemStatusInput = document.getElementById('itemStatus');
+const itemStatusDescription = document.getElementById('itemStatusDescription');
+const checkCurrentItemBtn = document.getElementById('checkCurrentItemBtn');
+const itemUrlPreview = document.getElementById('itemUrlPreview');
 
-const groupsFilterInput = document.getElementById('groupsFilterInput');
-const itemsFilterInput = document.getElementById('itemsFilterInput');
+const itemGroupTitleDropdownMenu = document.getElementById('itemGroupTitleDropdownMenu');
+const itemGroupTitleSelected = document.getElementById('itemGroupTitleSelected');
+const itemGroupTitleInput = document.getElementById('itemGroupTitle');
+
 let groupsFilterValue = '';
 let itemsFilterValue = '';
-groupsFilterInput.addEventListener('input', (e) => {
-    groupsFilterValue = e.target.value.toLowerCase();
-    renderGroups();
-});
-itemsFilterInput.addEventListener('input', (e) => {
-    itemsFilterValue = e.target.value.toLowerCase();
-    renderItems();
-});
 
-const groupsSortable = new Sortable(groupsList, {
-    animation: 150,
-    onStart: function(evt) {
-        const groupName = evt.item.textContent.split(' (')[0];
-        if (selectedItems.size > 1 && selectedItems.has(groupName)) {
-            evt.item.classList.add('dragging-selected');
-        } else {
-            selectedItems.clear();
-            selectedItems.add(groupName);
-        }
-    },
-    onEnd: function(evt) {
-        evt.item.classList.remove('dragging-selected');
-        updateGroupsOrder(evt);
-        renderGroups();
-    },
-    onChoose: function(evt) {
-        if (window.getSelection) {
-            window.getSelection().removeAllRanges();
-        } else if (document.selection) {
-            document.selection.empty();
-        }
-    }
-});
-
-function getGroupIndex(groupName) {
-    const groups = [...new Set(m3uData.map(item => item.groupTitle || 'No Group'))];
-    return groups.indexOf(groupName);
+function makeItemId() {
+    return `item_${Date.now()}_${nextItemId++}`;
 }
 
-const itemsSortable = new Sortable(itemsList, {
-    animation: 150,
-    onStart: function(evt) {
-        
-        if (selectedItems.size > 1 && selectedItems.has(evt.oldIndex)) {
-            
-            evt.item.classList.add('dragging-selected');
-        } else {
-            
-            selectedItems.clear();
-            selectedItems.add(evt.oldIndex);
-        }
-    },
-    onEnd: function(evt) {
-        evt.item.classList.remove('dragging-selected');
-        updateItemsOrder(evt);
-        
-        
-        renderItems();
-    },
-    onChoose: function(evt) {
-        
-        if (window.getSelection) {
-            window.getSelection().removeAllRanges();
-        } else if (document.selection) {
-            document.selection.empty();
-        }
-    }
-});
+function cleanGroupName(groupName) {
+    const value = String(groupName || '').trim();
+    return value || NO_GROUP;
+}
 
-fileInput.addEventListener('change', handleFileUpload);
-downloadBtn.addEventListener('click', downloadM3U);
-itemDetailsForm.addEventListener('submit', saveItemChanges);
-sortItemsBtn.addEventListener('click', sortItemsAlphabetically);
-document.getElementById('newItemBtn').addEventListener('click', createNewItem);
-document.getElementById('newGroupBtn').addEventListener('click', () => {
-    const groups = [...new Set(m3uData.map(item => item.groupTitle || 'No Group'))];
-    let newGroupName = 'New Group';
-    let suffix = 1;
-    while (groups.includes(newGroupName)) {
-        newGroupName = `New Group ${suffix++}`;
-    }
-    
-    m3uData.unshift({
-        name: '',
-        url: '',
-        tvgId: '',
-        tvgName: '',
-        tvgLogo: '',
-        groupTitle: newGroupName,
-        duration: '-1',
-        attributes: {}
+function getItemGroup(item) {
+    return cleanGroupName(item.groupTitle);
+}
+
+function ensureItem(item) {
+    if (!item._id) item._id = makeItemId();
+    item.name = item.name || 'Unnamed';
+    item.url = item.url || '';
+    item.tvgId = item.tvgId || '';
+    item.tvgName = item.tvgName || '';
+    item.tvgLogo = item.tvgLogo || '';
+    item.groupTitle = cleanGroupName(item.groupTitle);
+    item.duration = item.duration || '-1';
+    item.catchup = item.catchup || '';
+    item.catchupType = item.catchupType || '';
+    item.catchupDays = item.catchupDays || '';
+    item.additionalAttributes = item.additionalAttributes || '';
+    item.status = normalizeChannelStatus(item.status || STATUS_UNKNOWN);
+    item.statusDetail = item.statusDetail || '';
+    item.lastChecked = item.lastChecked || '';
+    item.extraLines = Array.isArray(item.extraLines) ? item.extraLines : [];
+    return item;
+}
+
+function uniqueList(values) {
+    const seen = new Set();
+    const output = [];
+    values.forEach(value => {
+        const normalized = cleanGroupName(value);
+        if (!seen.has(normalized)) {
+            seen.add(normalized);
+            output.push(normalized);
+        }
     });
-    renamingGroup = newGroupName;
-    selectedGroup = newGroupName;
-    saveToLocalStorage();
-    renderGroups();
-});
+    return output;
+}
 
-document.getElementById('deleteGroupsBtn').addEventListener('click', deleteSelectedGroups);
-document.getElementById('deleteItemsBtn').addEventListener('click', deleteSelectedItems);
-clearBtn.addEventListener('click', () => {
-    if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
-        localStorage.clear();
-        location.reload();
+function syncGroupOrder() {
+    m3uData.forEach(ensureItem);
+    const groupsFromItems = uniqueList(m3uData.map(getItemGroup));
+    groupOrder = uniqueList([...groupOrder, ...groupsFromItems]);
+    if (selectedGroup && !groupOrder.includes(selectedGroup)) selectedGroup = null;
+    selectedGroups = new Set([...selectedGroups].filter(group => groupOrder.includes(group)));
+}
+
+function getAllGroups() {
+    syncGroupOrder();
+    return groupOrder.slice();
+}
+
+function getVisibleGroups() {
+    const groups = getAllGroups();
+    if (!groupsFilterValue) return groups;
+    return groups.filter(group => group.toLowerCase().includes(groupsFilterValue));
+}
+
+function getGroupCount(groupName) {
+    return m3uData.filter(item => getItemGroup(item) === groupName).length;
+}
+
+function ensureGroupExists(groupName) {
+    const group = cleanGroupName(groupName);
+    if (!groupOrder.includes(group)) groupOrder.push(group);
+    return group;
+}
+
+function getGroupItems(groupName) {
+    const group = cleanGroupName(groupName);
+    return m3uData.filter(item => getItemGroup(item) === group);
+}
+
+function getVisibleItemsForSelectedGroup() {
+    if (!selectedGroup) return [];
+    const items = getGroupItems(selectedGroup);
+    if (!itemsFilterValue) return items;
+    return items.filter(item => {
+        const haystack = [item.name, item.url, item.tvgId, item.tvgName, item.tvgLogo].join(' ').toLowerCase();
+        return haystack.includes(itemsFilterValue);
+    });
+}
+
+function rebuildDataByGroupOrder() {
+    syncGroupOrder();
+    const grouped = new Map();
+    m3uData.forEach(item => {
+        const group = getItemGroup(item);
+        if (!grouped.has(group)) grouped.set(group, []);
+        grouped.get(group).push(item);
+    });
+
+    const newData = [];
+    groupOrder.forEach(group => {
+        if (grouped.has(group)) newData.push(...grouped.get(group));
+    });
+
+    grouped.forEach((items, group) => {
+        if (!groupOrder.includes(group)) {
+            groupOrder.push(group);
+            newData.push(...items);
+        }
+    });
+
+    m3uData = newData;
+}
+
+function replaceGroupItems(groupName, newGroupItems) {
+    const group = cleanGroupName(groupName);
+    let inserted = false;
+    const newData = [];
+
+    m3uData.forEach(item => {
+        if (getItemGroup(item) === group) {
+            if (!inserted) {
+                newData.push(...newGroupItems);
+                inserted = true;
+            }
+            return;
+        }
+        newData.push(item);
+    });
+
+    if (!inserted && newGroupItems.length > 0) {
+        const insertAt = findInsertIndexForGroup(group);
+        newData.splice(insertAt, 0, ...newGroupItems);
     }
-});
 
-const moveItemsBtn = document.getElementById('moveItemsBtn');
-const groupDropdown = document.getElementById('groupDropdown');
+    m3uData = newData;
+    ensureGroupExists(group);
+}
 
-function updateItemsOrder(evt) {
-    if (!selectedGroup) return;
+function findInsertIndexForGroup(groupName) {
+    const group = cleanGroupName(groupName);
+    const allGroups = getAllGroups();
+    const groupIndex = allGroups.indexOf(group);
 
-    let selectedIndices = Array.from(selectedItems);
-    let selectedItemsData = selectedIndices.map(i => selectedGroupItems[i]);
-
-    if (selectedItems.size <= 1) {
-        selectedIndices = [evt.oldIndex];
-        selectedItemsData = [selectedGroupItems[evt.oldIndex]];
+    for (let i = 0; i < m3uData.length; i++) {
+        const currentGroup = getItemGroup(m3uData[i]);
+        const currentIndex = allGroups.indexOf(currentGroup);
+        if (currentIndex > groupIndex) return i;
     }
 
-    const remainingItems = selectedGroupItems.filter((_, i) => !selectedIndices.includes(i));
+    return m3uData.length;
+}
 
-    let insertAt = evt.newIndex;
-    if (evt.oldIndex < evt.newIndex) {
-        insertAt = evt.newIndex - selectedIndices.filter(i => i < evt.newIndex).length + 1;
+function moveSelectedBlock(order, movingItems, newIndex) {
+    const movingSet = new Set(movingItems);
+    const orderedMoving = order.filter(item => movingSet.has(item));
+    if (orderedMoving.length === 0) return order.slice();
+
+    const selectedIndices = orderedMoving.map(item => order.indexOf(item)).sort((a, b) => a - b);
+    const minIndex = selectedIndices[0];
+    const maxIndex = selectedIndices[selectedIndices.length - 1];
+
+    if (newIndex >= minIndex && newIndex <= maxIndex) return order.slice();
+
+    const remaining = order.filter(item => !movingSet.has(item));
+    let insertAt = newIndex;
+
+    if (newIndex > minIndex) {
+        insertAt = newIndex - selectedIndices.filter(index => index < newIndex).length + 1;
     }
 
-    const newOrder = [
-        ...remainingItems.slice(0, insertAt),
-        ...selectedItemsData,
-        ...remainingItems.slice(insertAt)
+    insertAt = Math.max(0, Math.min(insertAt, remaining.length));
+    return [
+        ...remaining.slice(0, insertAt),
+        ...orderedMoving,
+        ...remaining.slice(insertAt)
     ];
+}
 
-    m3uData = m3uData.filter(item => item.groupTitle !== selectedGroup);
-    m3uData = [...m3uData, ...newOrder];
+function mergeVisibleOrder(fullOrder, originalVisibleOrder, newVisibleOrder) {
+    const visibleSet = new Set(originalVisibleOrder);
+    let visibleIndex = 0;
 
-    selectedItems.clear();
-    for (let i = 0; i < selectedItemsData.length; i++) {
-        selectedItems.add(insertAt + i);
+    return fullOrder.map(item => {
+        if (!visibleSet.has(item)) return item;
+        return newVisibleOrder[visibleIndex++];
+    });
+}
+
+function parseAttributeString(text) {
+    const attributes = {};
+    const order = [];
+    const source = String(text || '');
+    const regex = /([A-Za-z0-9_:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|“([^”]*)”|([^\s"'“”]+))/g;
+    let match;
+
+    while ((match = regex.exec(source)) !== null) {
+        const key = match[1];
+        const value = match[2] ?? match[3] ?? match[4] ?? match[5] ?? '';
+        if (!Object.prototype.hasOwnProperty.call(attributes, key)) order.push(key);
+        attributes[key] = value;
     }
 
-    renderItems();
-    saveToLocalStorage();
+    return { attributes, order };
+}
+
+function formatAttribute(key, value) {
+    return `${key}="${String(value).replace(/"/g, '&quot;')}"`;
+}
+
+function formatAdditionalAttributes(attributes, order) {
+    return order
+        .filter(key => !knownAttributeKeys.has(key))
+        .map(key => formatAttribute(key, attributes[key]))
+        .join(' ');
+}
+
+function buildAdditionalAttributes(item) {
+    const parsed = parseAttributeString(item.additionalAttributes || '');
+    return parsed.order
+        .filter(key => !knownAttributeKeys.has(key))
+        .map(key => formatAttribute(key, parsed.attributes[key]))
+        .join(' ');
+}
+
+function buildExtinfLine(item) {
+    const attributes = [];
+    if (item.tvgId) attributes.push(formatAttribute('tvg-id', item.tvgId));
+    if (item.tvgName) attributes.push(formatAttribute('tvg-name', item.tvgName));
+    if (item.tvgLogo) attributes.push(formatAttribute('tvg-logo', item.tvgLogo));
+    if (item.groupTitle) attributes.push(formatAttribute('group-title', item.groupTitle));
+    if (item.catchup) attributes.push(formatAttribute('catchup', item.catchup));
+    if (item.catchupType) attributes.push(formatAttribute('catchup-type', item.catchupType));
+    if (item.catchupDays !== '') attributes.push(formatAttribute('catchup-days', item.catchupDays));
+
+    const additional = buildAdditionalAttributes(item);
+    if (additional) attributes.push(additional);
+
+    const attrsText = attributes.length ? ` ${attributes.join(' ')}` : '';
+    return `#EXTINF:${item.duration || '-1'}${attrsText},${item.name || ''}`;
+}
+
+function normalizeChannelStatus(status) {
+    const value = String(status || '').trim();
+    return value || STATUS_UNKNOWN;
+}
+
+function getStatusDescription(status) {
+    const value = normalizeChannelStatus(status);
+    const code = Number(value);
+
+    if (value === STATUS_UNKNOWN) return 'Unknown. This channel has not been checked yet.';
+    if (value === 'Queued') return 'Queued. This channel is waiting to be checked.';
+    if (value === 'Checking') return 'Checking now.';
+    if (value === 'No URL') return 'No URL is set for this channel.';
+    if (value === 'Bad URL') return 'The URL is not valid.';
+    if (value === 'Unsupported') return 'Only http and https URLs can be checked from the browser.';
+    if (value === 'CORS') return 'The browser reached it, but the server did not allow reading the real HTTP status.';
+    if (value === 'Blocked') return 'The browser could not complete the request. It may be mixed content, DNS, network, ad blocker, or CORS.';
+
+    if (code >= 200 && code < 300) return `${value} means fine and reachable.`;
+    if (code >= 300 && code < 400) return `${value} means redirected. The final URL may still work in a player.`;
+    if (code === 401) return '401 means authentication is required.';
+    if (code === 403) return '403 means it is not accessible by you. It may be token, account, or geo-limited.';
+    if (code === 404) return '404 means not found.';
+    if (code === 408) return '408 means the server timed out.';
+    if (code === 410) return '410 means gone.';
+    if (code === 429) return '429 means rate-limited.';
+    if (code === 451) return '451 means unavailable for legal or regional reasons.';
+    if (code >= 400 && code < 500) return `${value} is a client/access error.`;
+    if (code >= 500 && code < 600) return `${value} is a provider/server error.`;
+    return value;
+}
+
+function getStatusClass(status) {
+    const value = normalizeChannelStatus(status);
+    const code = Number(value);
+
+    if (value === 'Checking') return 'status-checking';
+    if (value === 'Queued' || value === STATUS_UNKNOWN || value === 'CORS') return 'status-neutral';
+    if (value === 'Blocked' || value === 'No URL' || value === 'Bad URL' || value === 'Unsupported') return 'status-bad';
+    if (code >= 200 && code < 300) return 'status-ok';
+    if (code >= 300 && code < 400) return 'status-warning';
+    if (code === 401 || code === 403 || code === 408 || code === 429 || code === 451) return 'status-warning';
+    if (code >= 400) return 'status-bad';
+    return 'status-neutral';
+}
+
+function getStatusLabel(item) {
+    return normalizeChannelStatus(item && item.status);
+}
+
+function getStatusTitle(item) {
+    const detail = item && item.statusDetail ? String(item.statusDetail) : getStatusDescription(item && item.status);
+    const checked = item && item.lastChecked ? ` Last checked: ${item.lastChecked}` : '';
+    return `${detail}${checked}`.trim();
+}
+
+function markChannelStatus(item, status, detail) {
+    if (!item) return;
+    item.status = normalizeChannelStatus(status);
+    item.statusDetail = detail || getStatusDescription(item.status);
+    item.lastChecked = new Date().toLocaleString();
+}
+
+function setProgress(text) {
+    checkingProgressText = text || '';
+    if (statusCheckProgress) statusCheckProgress.textContent = checkingProgressText;
+}
+
+function updateItemStatusControls(item) {
+    const status = getStatusLabel(item);
+    const description = getStatusTitle(item);
+
+    if (itemStatusInput) {
+        itemStatusInput.value = status;
+        itemStatusInput.className = `form-control form-control-sm ${getStatusClass(status)}`;
+        itemStatusInput.title = description;
+    }
+
+    if (itemStatusDescription) itemStatusDescription.textContent = description;
+}
+
+function getSelectedChannelItems() {
+    const visibleSelected = selectedGroupItems.filter(item => selectedChannels.has(item._id));
+    const visibleIds = new Set(visibleSelected.map(item => item._id));
+    const hiddenSelected = m3uData.filter(item => selectedChannels.has(item._id) && !visibleIds.has(item._id));
+    return [...visibleSelected, ...hiddenSelected];
+}
+
+function resetItemForm() {
+    itemDetailsForm.reset();
+    itemIndexInput.value = '';
+    itemGroupTitleSelected.textContent = selectedGroup || 'Select group';
+    itemGroupTitleInput.value = selectedGroup || '';
+    updateItemStatusControls(null);
+    if (checkCurrentItemBtn) checkCurrentItemBtn.disabled = true;
+    updateItemUrlPreview('');
+}
+
+function fillItemForm(item) {
+    if (!item) {
+        resetItemForm();
+        return;
+    }
+
+    itemIndexInput.value = item._id;
+    itemNameInput.value = item.name || '';
+    itemUrlInput.value = item.url || '';
+    itemTvgIdInput.value = item.tvgId || '';
+    itemTvgNameInput.value = item.tvgName || '';
+    itemTvgLogoInput.value = item.tvgLogo || '';
+    itemCatchupInput.value = item.catchup || '';
+    itemCatchupTypeInput.value = item.catchupType || '';
+    itemCatchupDaysInput.value = item.catchupDays || '';
+    itemAdditionalAttrsInput.value = item.additionalAttributes || '';
+    updateItemStatusControls(item);
+    if (checkCurrentItemBtn) checkCurrentItemBtn.disabled = isCheckingChannels || !item._id;
+    updateItemGroupTitleDropdown(item.groupTitle || selectedGroup || NO_GROUP);
+    updateItemUrlPreview(item.url || '');
+}
+
+function updateItemUrlPreview(url) {
+    if (!url) {
+        itemUrlPreview.href = '#';
+        itemUrlPreview.classList.add('disabled');
+        itemUrlPreview.setAttribute('tabindex', '-1');
+        return;
+    }
+
+    itemUrlPreview.href = url;
+    itemUrlPreview.classList.remove('disabled');
+    itemUrlPreview.removeAttribute('tabindex');
 }
 
 function updateGroupDropdown() {
-    const groups = [...new Set(m3uData.map(item => item.groupTitle || 'No Group'))];
+    const groups = getAllGroups();
     groupDropdown.innerHTML = '';
 
     groups.forEach(group => {
         const li = document.createElement('li');
-        const a = document.createElement('a');
-        a.className = 'dropdown-item';
-        a.href = '#';
-        a.textContent = group;
-        a.addEventListener('click', (e) => {
-            e.preventDefault();
+        const link = document.createElement('a');
+        link.className = 'dropdown-item';
+        link.href = '#';
+        link.textContent = group;
+        link.addEventListener('click', event => {
+            event.preventDefault();
             moveSelectedItemsToGroup(group);
         });
-        li.appendChild(a);
+        li.appendChild(link);
         groupDropdown.appendChild(li);
     });
-
-    moveItemsBtn.disabled = selectedItems.size === 0 || groupDropdown.children.length === 0;
 }
 
+function updateItemGroupTitleDropdown(selectedValue) {
+    const groups = getAllGroups();
+    itemGroupTitleDropdownMenu.innerHTML = '';
 
-function moveSelectedItemsToGroup(targetGroup) {
-    if (selectedItems.size === 0 || !selectedGroup) return;
-
-    
-    
-    const selectedItemIndices = Array.from(selectedItems);
-    const itemsToMove = selectedItemIndices.map(index => selectedGroupItems[index]).filter(Boolean);
-
-    
-    itemsToMove.forEach(item => {
-        item.groupTitle = targetGroup;
+    groups.forEach(group => {
+        const li = document.createElement('li');
+        const link = document.createElement('a');
+        link.className = 'dropdown-item';
+        link.href = '#';
+        link.textContent = group;
+        link.addEventListener('click', event => {
+            event.preventDefault();
+            itemGroupTitleSelected.textContent = group;
+            itemGroupTitleInput.value = group;
+        });
+        li.appendChild(link);
+        itemGroupTitleDropdownMenu.appendChild(li);
     });
 
-    
-    selectedItems.clear();
+    const value = cleanGroupName(selectedValue || selectedGroup || groups[0] || NO_GROUP);
+    itemGroupTitleSelected.textContent = value;
+    itemGroupTitleInput.value = value;
+}
 
-    
+function updateActionState() {
+    syncGroupOrder();
+    const groupCount = getAllGroups().length;
+    const visibleGroupCount = getVisibleGroups().length;
+    const itemCount = selectedGroup ? getGroupItems(selectedGroup).length : 0;
+    const selectedGroupCount = selectedGroups.size;
+    const selectedItemCount = selectedChannels.size;
+
+    renameGroupBtn.disabled = selectedGroupCount !== 1;
+    deleteGroupsBtn.disabled = selectedGroupCount === 0;
+    sortGroupsBtn.disabled = visibleGroupCount < 2;
+
+    newItemBtn.disabled = !selectedGroup;
+    renameItemBtn.disabled = selectedItemCount !== 1;
+    sortItemsBtn.disabled = !selectedGroup || itemCount < 2;
+    checkItemsBtn.disabled = isCheckingChannels || selectedItemCount === 0;
+    checkItemsBtn.textContent = isCheckingChannels ? 'Checking...' : 'Check';
+    if (checkCurrentItemBtn) checkCurrentItemBtn.disabled = isCheckingChannels || !activeChannelId;
+    moveItemsBtn.disabled = selectedItemCount === 0 || groupCount === 0;
+    deleteItemsBtn.disabled = selectedItemCount === 0;
+    downloadBtn.disabled = m3uData.length === 0 && getAllGroups().length === 0;
+
+    groupSelectedCount.textContent = selectedGroupCount ? `(${selectedGroupCount} selected)` : '';
+    itemSelectedCount.textContent = selectedItemCount ? `(${selectedItemCount} selected)` : '';
+    if (statusCheckProgress) statusCheckProgress.textContent = checkingProgressText;
+}
+
+function renderGroups() {
+    syncGroupOrder();
+    const groups = getVisibleGroups();
+    groupsList.innerHTML = '';
+    updateGroupDropdown();
+    updateItemGroupTitleDropdown(itemGroupTitleInput.value || selectedGroup || '');
+
+    groups.forEach(group => {
+        const groupItem = document.createElement('div');
+        groupItem.className = 'list-group-item d-flex justify-content-between align-items-center gap-2';
+        groupItem.dataset.groupName = group;
+
+        if (selectedGroups.has(group)) groupItem.classList.add('selected');
+        if (selectedGroup === group) groupItem.classList.add('active');
+
+        if (renamingGroup === group) {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = group;
+            input.className = 'form-control form-control-sm';
+            input.addEventListener('keydown', event => {
+                if (event.key === 'Enter') saveGroupRename(group, input.value);
+                if (event.key === 'Escape') {
+                    renamingGroup = null;
+                    renderGroups();
+                }
+            });
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'btn btn-sm btn-success';
+            saveBtn.textContent = 'Save';
+            saveBtn.addEventListener('click', () => saveGroupRename(group, input.value));
+
+            groupItem.appendChild(input);
+            groupItem.appendChild(saveBtn);
+            setTimeout(() => {
+                input.focus();
+                input.select();
+            }, 0);
+        } else {
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'list-name';
+            nameSpan.textContent = group;
+
+            const countSpan = document.createElement('span');
+            countSpan.className = 'badge bg-secondary ms-auto';
+            countSpan.textContent = getGroupCount(group);
+
+            groupItem.appendChild(nameSpan);
+            groupItem.appendChild(countSpan);
+            groupItem.addEventListener('click', event => selectGroup(event, group));
+            groupItem.addEventListener('dblclick', () => startGroupRename(group));
+        }
+
+        groupsList.appendChild(groupItem);
+    });
+
+    if (!selectedGroup && getAllGroups().length > 0) {
+        const firstGroup = groups[0] || getAllGroups()[0];
+        selectedGroup = firstGroup;
+        selectedGroups = new Set([firstGroup]);
+        groupSelectionAnchor = firstGroup;
+        renderGroups();
+        renderItems();
+        return;
+    }
+
+    updateActionState();
+}
+
+function renderItems() {
+    selectedGroupItems = getVisibleItemsForSelectedGroup();
+    selectedChannels = new Set([...selectedChannels].filter(id => m3uData.some(item => item._id === id)));
+
+    if (activeChannelId && !m3uData.some(item => item._id === activeChannelId)) {
+        activeChannelId = null;
+    }
+
+    itemsList.innerHTML = '';
+
+    if (!selectedGroup) {
+        resetItemForm();
+        updateActionState();
+        return;
+    }
+
+    selectedGroupItems.forEach(item => {
+        const itemElement = document.createElement('div');
+        itemElement.className = 'list-group-item d-flex justify-content-between align-items-center gap-2';
+        itemElement.dataset.itemId = item._id;
+
+        if (selectedChannels.has(item._id)) itemElement.classList.add('selected');
+        if (activeChannelId === item._id) itemElement.classList.add('active');
+
+        if (renamingItemId === item._id) {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = item.name || 'Unnamed';
+            input.className = 'form-control form-control-sm';
+            input.addEventListener('keydown', event => {
+                if (event.key === 'Enter') saveItemRename(item._id, input.value);
+                if (event.key === 'Escape') {
+                    renamingItemId = null;
+                    renderItems();
+                }
+            });
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'btn btn-sm btn-success';
+            saveBtn.textContent = 'Save';
+            saveBtn.addEventListener('click', () => saveItemRename(item._id, input.value));
+
+            itemElement.appendChild(input);
+            itemElement.appendChild(saveBtn);
+            setTimeout(() => {
+                input.focus();
+                input.select();
+            }, 0);
+        } else {
+            const channelMain = document.createElement('span');
+            channelMain.className = 'channel-main d-flex align-items-center gap-2';
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'list-name';
+            nameSpan.textContent = item.name || 'Unnamed';
+
+            const statusSpan = document.createElement('span');
+            statusSpan.className = `status-badge ${getStatusClass(item.status)}`;
+            statusSpan.textContent = getStatusLabel(item);
+            statusSpan.title = getStatusTitle(item);
+
+            const urlSpan = document.createElement('span');
+            urlSpan.className = 'item-meta text-muted ms-auto';
+            urlSpan.textContent = item.url || '';
+            urlSpan.title = item.url || '';
+
+            channelMain.appendChild(nameSpan);
+            channelMain.appendChild(statusSpan);
+            itemElement.appendChild(channelMain);
+            itemElement.appendChild(urlSpan);
+            itemElement.addEventListener('click', event => selectItem(event, item._id));
+            itemElement.addEventListener('dblclick', () => startItemRename(item._id));
+        }
+
+        itemsList.appendChild(itemElement);
+    });
+
+    if (activeChannelId) {
+        fillItemForm(m3uData.find(item => item._id === activeChannelId));
+    } else {
+        resetItemForm();
+    }
+
+    updateActionState();
+}
+
+function selectGroup(event, groupName) {
+    const group = cleanGroupName(groupName);
+    const visibleGroups = getVisibleGroups();
+    const useToggle = event && (event.ctrlKey || event.metaKey);
+    const useRange = event && event.shiftKey;
+
+    renamingGroup = null;
+    renamingItemId = null;
+
+    if (useToggle) {
+        if (selectedGroups.has(group)) {
+            selectedGroups.delete(group);
+        } else {
+            selectedGroups.add(group);
+            selectedGroup = group;
+        }
+        if (!selectedGroups.size) selectedGroup = null;
+        if (selectedGroup && !selectedGroups.has(selectedGroup)) selectedGroup = [...selectedGroups][0] || null;
+        groupSelectionAnchor = group;
+        selectedChannels.clear();
+        activeChannelId = null;
+        renderGroups();
+        renderItems();
+        return;
+    }
+
+    if (useRange) {
+        const anchor = groupSelectionAnchor || selectedGroup || group;
+        let start = visibleGroups.indexOf(anchor);
+        let end = visibleGroups.indexOf(group);
+        if (start === -1) start = 0;
+        if (end === -1) end = start;
+        if (start > end) [start, end] = [end, start];
+        selectedGroups = new Set(visibleGroups.slice(start, end + 1));
+        selectedGroup = group;
+        selectedChannels.clear();
+        activeChannelId = null;
+        renderGroups();
+        renderItems();
+        return;
+    }
+
+    selectedGroup = group;
+    selectedGroups = new Set([group]);
+    groupSelectionAnchor = group;
+    selectedChannels.clear();
+    activeChannelId = null;
+    renderGroups();
+    renderItems();
+}
+
+function selectItem(event, itemId) {
+    const item = m3uData.find(entry => entry._id === itemId);
+    if (!item) return;
+
+    const useToggle = event && (event.ctrlKey || event.metaKey);
+    const useRange = event && event.shiftKey;
+
+    renamingItemId = null;
+
+    if (useToggle) {
+        if (selectedChannels.has(itemId)) {
+            selectedChannels.delete(itemId);
+            if (activeChannelId === itemId) activeChannelId = [...selectedChannels][0] || null;
+        } else {
+            selectedChannels.add(itemId);
+            activeChannelId = itemId;
+        }
+        itemSelectionAnchorId = itemId;
+        renderItems();
+        return;
+    }
+
+    if (useRange) {
+        const visibleIds = selectedGroupItems.map(entry => entry._id);
+        const anchor = itemSelectionAnchorId || activeChannelId || itemId;
+        let start = visibleIds.indexOf(anchor);
+        let end = visibleIds.indexOf(itemId);
+        if (start === -1) start = 0;
+        if (end === -1) end = start;
+        if (start > end) [start, end] = [end, start];
+        selectedChannels = new Set(visibleIds.slice(start, end + 1));
+        activeChannelId = itemId;
+        renderItems();
+        return;
+    }
+
+    selectedChannels = new Set([itemId]);
+    activeChannelId = itemId;
+    itemSelectionAnchorId = itemId;
+    renderItems();
+}
+
+function startGroupRename(groupName) {
+    const group = cleanGroupName(groupName);
+    if (!groupOrder.includes(group)) return;
+    selectedGroup = group;
+    selectedGroups = new Set([group]);
+    groupSelectionAnchor = group;
+    renamingGroup = group;
+    renderGroups();
+}
+
+function startSelectedGroupRename() {
+    if (selectedGroups.size !== 1) return;
+    startGroupRename([...selectedGroups][0]);
+}
+
+function startItemRename(itemId) {
+    const item = m3uData.find(entry => entry._id === itemId);
+    if (!item) return;
+    selectedChannels = new Set([itemId]);
+    activeChannelId = itemId;
+    itemSelectionAnchorId = itemId;
+    renamingItemId = itemId;
+    renderItems();
+}
+
+function startSelectedItemRename() {
+    if (selectedChannels.size !== 1) return;
+    startItemRename([...selectedChannels][0]);
+}
+
+function saveGroupRename(oldName, newName) {
+    const oldGroup = cleanGroupName(oldName);
+    const newGroup = cleanGroupName(newName);
+
+    if (!newGroup || oldGroup === newGroup) {
+        renamingGroup = null;
+        renderGroups();
+        return;
+    }
+
+    if (groupOrder.includes(newGroup) && oldGroup !== newGroup) {
+        const shouldMerge = confirm(`A group named "${newGroup}" already exists. Merge "${oldGroup}" into it?`);
+        if (!shouldMerge) return;
+        groupOrder = groupOrder.filter(group => group !== oldGroup);
+    } else {
+        groupOrder = groupOrder.map(group => group === oldGroup ? newGroup : group);
+    }
+
+    m3uData.forEach(item => {
+        if (getItemGroup(item) === oldGroup) item.groupTitle = newGroup;
+    });
+
+    selectedGroup = newGroup;
+    selectedGroups = new Set([newGroup]);
+    groupSelectionAnchor = newGroup;
+    renamingGroup = null;
+    rebuildDataByGroupOrder();
     saveToLocalStorage();
     renderGroups();
     renderItems();
-    updateDeleteButtonsState();
+}
 
-    
-    alert(`Moved ${itemsToMove.length} item(s) to "${targetGroup}"`);
+function saveItemRename(itemId, newName) {
+    const item = m3uData.find(entry => entry._id === itemId);
+    if (!item) return;
+
+    const name = String(newName || '').trim();
+    if (!name) {
+        renamingItemId = null;
+        renderItems();
+        return;
+    }
+
+    item.name = name;
+    renamingItemId = null;
+    activeChannelId = itemId;
+    selectedChannels = new Set([itemId]);
+    saveToLocalStorage();
+    renderItems();
+}
+
+function createNewGroup() {
+    const groups = getAllGroups();
+    let newGroupName = 'New Group';
+    let suffix = 1;
+
+    while (groups.includes(newGroupName)) {
+        newGroupName = `New Group ${suffix++}`;
+    }
+
+    groupOrder.unshift(newGroupName);
+    selectedGroup = newGroupName;
+    selectedGroups = new Set([newGroupName]);
+    groupSelectionAnchor = newGroupName;
+    selectedChannels.clear();
+    activeChannelId = null;
+    renamingGroup = newGroupName;
+    rebuildDataByGroupOrder();
+    saveToLocalStorage();
+    renderGroups();
+    renderItems();
 }
 
 function createNewItem() {
-    if (!selectedGroup) {
-        alert('Please select a group first');
-        return;
-    }
-    
-    
-    const newItem = {
+    if (!selectedGroup) return;
+
+    const group = ensureGroupExists(selectedGroup);
+    const item = ensureItem({
         name: 'New Item',
         url: '',
         tvgId: '',
         tvgName: '',
         tvgLogo: '',
-        groupTitle: selectedGroup,
+        groupTitle: group,
         duration: '-1',
-        attributes: {}
-    };
-    
-    
-    m3uData.unshift(newItem);
-    
-    
-    saveToLocalStorage();
-    renderItems();
-    
-    
-    selectItem({}, 0);
-    
-    
-    setTimeout(() => {
-        document.getElementById('itemName').focus();
-        document.getElementById('itemName').select();
-    }, 100);
-}
+        catchup: '',
+        catchupType: '',
+        catchupDays: '',
+        additionalAttributes: '',
+        status: STATUS_UNKNOWN,
+        statusDetail: '',
+        lastChecked: '',
+        extraLines: []
+    });
 
-function updateDeleteButtonsState() {
-    const hasSelection = selectedItems.size > 0;
-    document.getElementById('deleteGroupsBtn').disabled = !hasSelection;
-    document.getElementById('deleteItemsBtn').disabled = !hasSelection || !selectedGroup;
-    moveItemsBtn.disabled = !hasSelection || !selectedGroup || groupDropdown.children.length === 0;
+    const groupItems = getGroupItems(group);
+    if (groupItems.length) {
+        const firstIndex = m3uData.findIndex(entry => getItemGroup(entry) === group);
+        m3uData.splice(firstIndex, 0, item);
+    } else {
+        const insertAt = findInsertIndexForGroup(group);
+        m3uData.splice(insertAt, 0, item);
+    }
+
+    selectedChannels = new Set([item._id]);
+    activeChannelId = item._id;
+    itemSelectionAnchorId = item._id;
+    saveToLocalStorage();
+    renderGroups();
+    renderItems();
+
+    setTimeout(() => {
+        itemNameInput.focus();
+        itemNameInput.select();
+    }, 0);
 }
 
 function deleteSelectedGroups() {
-    if (selectedItems.size === 0) return;
-    
-    if (!confirm(`Delete ${selectedItems.size} selected group(s)? This will also delete all items in these groups.`)) {
+    if (!selectedGroups.size) return;
+
+    const count = selectedGroups.size;
+    if (!confirm(`Delete ${count} selected group${count === 1 ? '' : 's'}? This will also delete every channel inside.`)) {
         return;
     }
-    
-    
-    const allGroups = [...new Set(m3uData.map(item => item.groupTitle || 'No Group'))];
-    
-    
-    const remainingGroups = allGroups.filter(group => !selectedItems.has(group));
-    const newData = [];
-    
-    remainingGroups.forEach(group => {
-        const groupItems = m3uData.filter(item => item.groupTitle === group);
-        newData.push(...groupItems);
-    });
-    
-    m3uData = newData;
-    
-    
-    selectedItems.clear();
-    selectedGroup = null;
-    
-    
-    renderGroups();
-    itemsList.innerHTML = '';
-    itemDetailsForm.reset();
+
+    const groupsToDelete = new Set(selectedGroups);
+    m3uData = m3uData.filter(item => !groupsToDelete.has(getItemGroup(item)));
+    groupOrder = groupOrder.filter(group => !groupsToDelete.has(group));
+    selectedGroups.clear();
+    selectedGroup = groupOrder[0] || null;
+    if (selectedGroup) selectedGroups.add(selectedGroup);
+    groupSelectionAnchor = selectedGroup;
+    selectedChannels.clear();
+    activeChannelId = null;
     saveToLocalStorage();
-    updateDeleteButtonsState();
+    renderGroups();
+    renderItems();
 }
 
 function deleteSelectedItems() {
-    if (selectedItems.size === 0 || !selectedGroup) return;
-    
-    
-    const indicesToDelete = Array.from(selectedItems).sort((a, b) => b - a);
-    
-    
-    const groupItems = m3uData.filter(item => item.groupTitle === selectedGroup);
-    
-    
-    indicesToDelete.forEach(index => {
-        const itemToDelete = groupItems[index];
-        if (itemToDelete) {
-            const itemIndex = m3uData.findIndex(item => item === itemToDelete);
-            if (itemIndex !== -1) {
-                m3uData.splice(itemIndex, 1);
-            }
-        }
-    });
-    
-    
-    selectedItems.clear();
-    
-    
-    renderItems();
-    itemDetailsForm.reset();
+    if (!selectedChannels.size) return;
+
+    const idsToDelete = new Set(selectedChannels);
+    m3uData = m3uData.filter(item => !idsToDelete.has(item._id));
+    selectedChannels.clear();
+    activeChannelId = null;
+    itemSelectionAnchorId = null;
     saveToLocalStorage();
-    updateDeleteButtonsState();
+    renderGroups();
+    renderItems();
+}
+
+function moveSelectedItemsToGroup(targetGroupName) {
+    if (!selectedChannels.size) return;
+
+    const targetGroup = ensureGroupExists(targetGroupName);
+    const movedIds = new Set(selectedChannels);
+
+    m3uData.forEach(item => {
+        if (movedIds.has(item._id)) item.groupTitle = targetGroup;
+    });
+
+    selectedGroup = targetGroup;
+    selectedGroups = new Set([targetGroup]);
+    groupSelectionAnchor = targetGroup;
+    selectedChannels = movedIds;
+    activeChannelId = [...movedIds][0] || null;
+    itemSelectionAnchorId = activeChannelId;
+    rebuildDataByGroupOrder();
+    saveToLocalStorage();
+    renderGroups();
+    renderItems();
+}
+
+function sortGroupsAlphabetically() {
+    const visibleGroups = getVisibleGroups();
+    const allGroups = getAllGroups();
+    const sortedVisible = visibleGroups.slice().sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    groupOrder = mergeVisibleOrder(allGroups, visibleGroups, sortedVisible);
+    rebuildDataByGroupOrder();
+    saveToLocalStorage();
+    renderGroups();
+    renderItems();
+}
+
+function sortItemsAlphabetically() {
+    if (!selectedGroup) return;
+
+    const groupItems = getGroupItems(selectedGroup).slice().sort((a, b) => {
+        return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+    });
+
+    replaceGroupItems(selectedGroup, groupItems);
+    saveToLocalStorage();
+    renderItems();
+}
+
+function updateGroupsOrder(evt) {
+    if (!evt) return;
+
+    const visibleGroups = getVisibleGroups();
+    const allGroups = getAllGroups();
+    const draggedGroup = evt.item.dataset.groupName || visibleGroups[evt.oldIndex];
+    const groupsToMove = selectedGroups.has(draggedGroup)
+        ? visibleGroups.filter(group => selectedGroups.has(group))
+        : [draggedGroup];
+
+    const newVisibleOrder = moveSelectedBlock(visibleGroups, groupsToMove, evt.newIndex);
+    groupOrder = mergeVisibleOrder(allGroups, visibleGroups, newVisibleOrder);
+    selectedGroup = draggedGroup;
+    selectedGroups = new Set(groupsToMove);
+    groupSelectionAnchor = draggedGroup;
+    selectedChannels.clear();
+    activeChannelId = null;
+    rebuildDataByGroupOrder();
+    saveToLocalStorage();
+    renderGroups();
+    renderItems();
+}
+
+function updateItemsOrder(evt) {
+    if (!selectedGroup || !evt) return;
+
+    const visibleItems = selectedGroupItems.slice();
+    const draggedId = evt.item.dataset.itemId || (visibleItems[evt.oldIndex] && visibleItems[evt.oldIndex]._id);
+    const selectedIds = selectedChannels.has(draggedId)
+        ? visibleItems.filter(item => selectedChannels.has(item._id)).map(item => item._id)
+        : [draggedId];
+
+    const visibleIds = visibleItems.map(item => item._id);
+    const newVisibleIds = moveSelectedBlock(visibleIds, selectedIds, evt.newIndex);
+    const itemById = new Map(visibleItems.map(item => [item._id, item]));
+    const newVisibleItems = newVisibleIds.map(id => itemById.get(id)).filter(Boolean);
+
+    const fullGroupItems = getGroupItems(selectedGroup);
+    const visibleSet = new Set(visibleIds);
+    let cursor = 0;
+    const newFullGroupItems = fullGroupItems.map(item => {
+        if (!visibleSet.has(item._id)) return item;
+        return newVisibleItems[cursor++] || item;
+    });
+
+    replaceGroupItems(selectedGroup, newFullGroupItems);
+    selectedChannels = new Set(selectedIds);
+    activeChannelId = draggedId;
+    itemSelectionAnchorId = draggedId;
+    saveToLocalStorage();
+    renderItems();
+}
+
+
+function isHttpUrl(url) {
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch (error) {
+        return false;
+    }
+}
+
+function isValidUrl(url) {
+    try {
+        new URL(url);
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
+function fetchWithTimeout(url, options, timeoutMs) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, { ...options, signal: controller.signal })
+        .finally(() => window.clearTimeout(timer));
+}
+
+async function readCorsStatus(url) {
+    const headResponse = await fetchWithTimeout(url, {
+        method: 'HEAD',
+        mode: 'cors',
+        cache: 'no-store',
+        redirect: 'follow'
+    }, 12000);
+
+    return headResponse;
+}
+
+async function readCorsStatusWithGet(url) {
+    const getResponse = await fetchWithTimeout(url, {
+        method: 'GET',
+        mode: 'cors',
+        cache: 'no-store',
+        redirect: 'follow'
+    }, 12000);
+
+    return getResponse;
+}
+
+async function canReachWithoutReadingStatus(url) {
+    await fetchWithTimeout(url, {
+        method: 'GET',
+        mode: 'no-cors',
+        cache: 'no-store',
+        redirect: 'follow'
+    }, 12000);
+}
+
+async function checkSingleChannel(item) {
+    const rawUrl = String(item.url || '').trim();
+
+    if (!rawUrl) {
+        markChannelStatus(item, 'No URL', getStatusDescription('No URL'));
+        return;
+    }
+
+    if (!isValidUrl(rawUrl)) {
+        markChannelStatus(item, 'Bad URL', getStatusDescription('Bad URL'));
+        return;
+    }
+
+    if (!isHttpUrl(rawUrl)) {
+        markChannelStatus(item, 'Unsupported', getStatusDescription('Unsupported'));
+        return;
+    }
+
+    try {
+        let response;
+        try {
+            response = await readCorsStatus(rawUrl);
+        } catch (headError) {
+            response = await readCorsStatusWithGet(rawUrl);
+        }
+
+        const status = String(response.status || STATUS_UNKNOWN);
+        const statusText = response.statusText ? ` ${response.statusText}` : '';
+        markChannelStatus(item, status, `${status}${statusText}. ${getStatusDescription(status)}`);
+        return;
+    } catch (corsOrNetworkError) {
+        try {
+            await canReachWithoutReadingStatus(rawUrl);
+            markChannelStatus(item, 'CORS', getStatusDescription('CORS'));
+        } catch (blockedError) {
+            const detail = blockedError && blockedError.name === 'AbortError'
+                ? 'The request timed out. The stream may be slow, endless, blocked, or unreachable.'
+                : getStatusDescription('Blocked');
+            markChannelStatus(item, 'Blocked', detail);
+        }
+    }
+}
+
+async function checkChannelItems(items, emptyMessage, finishedLabel) {
+    if (isCheckingChannels) return;
+
+    const targets = Array.from(new Set((items || []).filter(Boolean)));
+    if (targets.length === 0) {
+        setProgress(emptyMessage || 'Select at least one channel to check.');
+        updateActionState();
+        return;
+    }
+
+    isCheckingChannels = true;
+    updateActionState();
+
+    const candidates = [];
+    targets.forEach(item => {
+        ensureItem(item);
+        const url = String(item.url || '').trim();
+        item.lastChecked = new Date().toLocaleString();
+
+        if (!url) {
+            item.status = 'No URL';
+            item.statusDetail = getStatusDescription('No URL');
+            return;
+        }
+
+        if (!isValidUrl(url)) {
+            item.status = 'Bad URL';
+            item.statusDetail = getStatusDescription('Bad URL');
+            return;
+        }
+
+        if (!isHttpUrl(url)) {
+            item.status = 'Unsupported';
+            item.statusDetail = getStatusDescription('Unsupported');
+            return;
+        }
+
+        item.status = 'Checking';
+        item.statusDetail = getStatusDescription('Checking');
+        candidates.push(item);
+    });
+
+    setProgress(candidates.length
+        ? `Checking ${candidates.length} selected channel${candidates.length === 1 ? '' : 's'}...`
+        : 'Selected channels have no checkable HTTP or HTTPS URL.');
+    saveToLocalStorage();
+    renderItems();
+
+    await Promise.all(candidates.map(item => checkSingleChannel(item)));
+
+    isCheckingChannels = false;
+    setProgress(candidates.length
+        ? `Finished checking ${candidates.length} selected channel${candidates.length === 1 ? '' : 's'}.`
+        : 'Selected channels have no checkable HTTP or HTTPS URL.');
+    saveToLocalStorage();
+    renderItems();
+    updateActionState();
+}
+
+async function checkChannels() {
+    await checkChannelItems(getSelectedChannelItems(), 'Select at least one channel to check.', 'selected channels');
+}
+
+async function checkCurrentItem() {
+    if (!activeChannelId || isCheckingChannels) return;
+
+    saveCurrentItemFromForm();
+    const item = m3uData.find(entry => entry._id === activeChannelId);
+    if (!item) return;
+
+    selectedChannels = new Set([item._id]);
+    await checkChannelItems([item], 'Select a channel to check.', 'current channel');
 }
 
 function handleFileUpload(event) {
@@ -333,528 +1256,329 @@ function handleFileUpload(event) {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = function(e) {
-        const content = e.target.result;
-        parseM3U(content);
+    reader.onload = event => {
+        parseM3U(event.target.result);
+        saveToLocalStorage();
         renderGroups();
-        downloadBtn.disabled = false;
+        renderItems();
     };
     reader.readAsText(file);
 }
 
 function parseM3U(content) {
     m3uData = [];
-    const lines = content.split('\n');
+    groupOrder = [];
+    playlistHeader = '#EXTM3U';
+    selectedGroup = null;
+    selectedGroups.clear();
+    selectedChannels.clear();
+    activeChannelId = null;
+    renamingGroup = null;
+    renamingItemId = null;
+
+    const lines = String(content || '').replace(/\r/g, '').split('\n');
     let currentItem = null;
 
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
+    lines.forEach(rawLine => {
+        const line = rawLine.trim();
+        if (!line) return;
 
-        if (line.startsWith('#EXTINF')) {
-            currentItem = { rawExtinf: line };
-            const tvgIdMatch = line.match(/tvg-id="([^"]*)"/);
-            const tvgNameMatch = line.match(/tvg-name="([^"]*)"/);
-            const tvgLogoMatch = line.match(/tvg-logo="([^"]*)"/);
-            const groupTitleMatch = line.match(/group-title="([^"]*)"/);
-            
-            currentItem.tvgId = tvgIdMatch ? tvgIdMatch[1] : '';
-            currentItem.tvgName = tvgNameMatch ? tvgNameMatch[1] : '';
-            currentItem.tvgLogo = tvgLogoMatch ? tvgLogoMatch[1] : '';
-            currentItem.groupTitle = groupTitleMatch ? groupTitleMatch[1] : 'No Group';
-            
-            
-            const nameMatch = line.match(/,(.*)$/);
-            currentItem.name = nameMatch ? nameMatch[1].trim() : 'Unnamed';
-        } else if (currentItem && !line.startsWith('#')) {
-            currentItem.url = line.trim();
+        if (line.toUpperCase().startsWith('#EXTM3U')) {
+            playlistHeader = line;
+            playlistHeaderInput.value = playlistHeader;
+            return;
+        }
+
+        if (line.toUpperCase().startsWith('#EXTINF')) {
+            currentItem = parseExtinfLine(line);
+            return;
+        }
+
+        if (currentItem) {
+            if (line.startsWith('#')) {
+                currentItem.extraLines.push(line);
+                return;
+            }
+
+            currentItem.url = line;
+            ensureItem(currentItem);
             m3uData.push(currentItem);
+            ensureGroupExists(currentItem.groupTitle);
             currentItem = null;
         }
-    }
-    
-    saveToLocalStorage();
-}
-
-function renderGroups() {
-    let groups = [...new Set(m3uData.map(item => item.groupTitle || 'No Group'))];
-    if (groupsFilterValue) {
-        groups = groups.filter(g => g.toLowerCase().includes(groupsFilterValue));
-    }
-    groupsList.innerHTML = '';
-
-    
-    updateGroupDropdown();
-    updateItemGroupTitleDropdown(itemGroupTitleInput.value);
-
-    groups.forEach((group, idx) => {
-        const groupItem = document.createElement('div');
-        groupItem.className = 'list-group-item d-flex justify-content-between align-items-center';
-        if (renamingGroup === group) {
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.value = group;
-            input.className = 'form-control form-control-sm d-inline-block';
-            input.style.width = '70%';
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') saveGroupRename(group, input.value);
-            });
-            const saveBtn = document.createElement('button');
-            saveBtn.className = 'btn btn-sm btn-success ms-1';
-            saveBtn.textContent = 'Save';
-            saveBtn.onclick = () => saveGroupRename(group, input.value);
-            groupItem.appendChild(input);
-            groupItem.appendChild(saveBtn);
-            setTimeout(() => { input.focus(); input.select(); }, 50);
-        } else {
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = group;
-            const countSpan = document.createElement('span');
-            countSpan.className = 'badge bg-secondary ms-2';
-            countSpan.textContent = m3uData.filter(item => item.groupTitle === group).length;
-            groupItem.appendChild(nameSpan);
-            groupItem.appendChild(countSpan);
-            groupItem.addEventListener('click', (e) => selectGroup(e, group, idx));
-            groupItem.addEventListener('dblclick', () => {
-                renamingGroup = group;
-                renderGroups();
-            });
-            
-            if (selectedItems.has(group)) {
-                groupItem.classList.add('selected');
-            }
-            
-            if (selectedGroup === group) {
-                groupItem.classList.add('active');
-            }
-        }
-        groupsList.appendChild(groupItem);
     });
 
-    if (groups.length > 0 && !selectedGroup) {
-        selectGroup(null, groups[0], 0);
+    syncGroupOrder();
+    selectedGroup = groupOrder[0] || null;
+    if (selectedGroup) {
+        selectedGroups = new Set([selectedGroup]);
+        groupSelectionAnchor = selectedGroup;
     }
 }
 
-function selectGroup(event, groupName, groupIdx) {
-    const groupDisplayName = groupName.split(' (')[0];
-    const items = Array.from(groupsList.children);
-    let idx = groupIdx;
-    if (typeof idx !== 'number') {
-        idx = items.findIndex(item => item.textContent.split(' (')[0] === groupDisplayName);
-    }
+function parseExtinfLine(line) {
+    const commaIndex = line.indexOf(',');
+    const metaPart = commaIndex >= 0 ? line.slice(0, commaIndex) : line;
+    const name = commaIndex >= 0 ? line.slice(commaIndex + 1).trim() : 'Unnamed';
+    const info = metaPart.replace(/^#EXTINF:/i, '').trim();
+    const firstSpace = info.search(/\s/);
+    const duration = firstSpace >= 0 ? info.slice(0, firstSpace) : (info || '-1');
+    const attributeText = firstSpace >= 0 ? info.slice(firstSpace + 1) : '';
+    const parsed = parseAttributeString(attributeText);
+    const attrs = parsed.attributes;
 
-    if (event && event.ctrlKey) {
-        
-        if (selectedItems.has(groupDisplayName)) {
-            selectedItems.delete(groupDisplayName);
-        } else {
-            selectedItems.add(groupDisplayName);
-        }
-        
-        items.forEach((item, i) => {
-            const itemGroupName = item.textContent.split(' (')[0];
-            item.classList.toggle('selected', selectedItems.has(itemGroupName));
-            
-            item.classList.toggle('active', i === idx && selectedItems.has(groupDisplayName));
-        });
-        updateDeleteButtonsState();
-        return;
-    } else if (event && event.shiftKey) {
-        
-        const activeIdx = items.findIndex(item => item.classList.contains('active'));
-        const endIdx = idx;
-        const [start, end] = [Math.min(activeIdx, endIdx), Math.max(activeIdx, endIdx)];
-        
-        selectedItems.clear();
-        for (let i = start; i <= end; i++) {
-            const itemGroupName = items[i].textContent.split(' (')[0];
-            selectedItems.add(itemGroupName);
-        }
-        
-        items.forEach((item, i) => {
-            const itemGroupName = item.textContent.split(' (')[0];
-            item.classList.toggle('selected', selectedItems.has(itemGroupName));
-            item.classList.toggle('active', i === activeIdx);
-        });
-        updateDeleteButtonsState();
-        return;
-    }
-
-    
-    selectedItems.clear();
-    selectedItems.add(groupDisplayName);
-    selectedGroup = groupDisplayName;
-    
-    items.forEach((item, i) => {
-        const itemGroupName = item.textContent.split(' (')[0];
-        item.classList.toggle('selected', selectedItems.has(itemGroupName));
-        item.classList.toggle('active', i === idx);
-    });
-    renderItems();
-    updateDeleteButtonsState();
+    return {
+        _id: makeItemId(),
+        name: name || 'Unnamed',
+        url: '',
+        duration: duration || '-1',
+        tvgId: attrs['tvg-id'] || '',
+        tvgName: attrs['tvg-name'] || '',
+        tvgLogo: attrs['tvg-logo'] || '',
+        groupTitle: cleanGroupName(attrs['group-title']),
+        catchup: attrs.catchup || '',
+        catchupType: attrs['catchup-type'] || '',
+        catchupDays: attrs['catchup-days'] || '',
+        additionalAttributes: formatAdditionalAttributes(attrs, parsed.order),
+        status: STATUS_UNKNOWN,
+        statusDetail: '',
+        lastChecked: '',
+        extraLines: []
+    };
 }
-
-function renderItems() {
-    if (!selectedGroup) {
-        
-        updateGroupDropdown();
-        return;
-    }
-    
-    selectedGroupItems = m3uData.filter(item => item.groupTitle === selectedGroup);
-    if (itemsFilterValue) {
-        selectedGroupItems = selectedGroupItems.filter(item => (item.name || '').toLowerCase().includes(itemsFilterValue));
-    }
-    itemsList.innerHTML = '';
-    
-    selectedGroupItems.forEach((item, index) => {
-        const itemElement = document.createElement('div');
-        itemElement.className = 'list-group-item d-flex justify-content-between align-items-center';
-        if (renamingItemIndex === index) {
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.value = item.name || 'Unnamed';
-            input.className = 'form-control form-control-sm d-inline-block';
-            input.style.width = '70%';
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') saveItemRename(index, input.value);
-            });
-            const saveBtn = document.createElement('button');
-            saveBtn.className = 'btn btn-sm btn-success ms-1';
-            saveBtn.textContent = 'Save';
-            saveBtn.onclick = () => saveItemRename(index, input.value);
-            itemElement.appendChild(input);
-            itemElement.appendChild(saveBtn);
-            setTimeout(() => { input.focus(); input.select(); }, 50);
-        } else {
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = item.name || 'Unnamed';
-            const urlSpan = document.createElement('span');
-            urlSpan.className = 'text-muted ms-2';
-            let url = item.url || '';
-            if (url.length > 32) url = url.slice(0, 29) + '...';
-            urlSpan.textContent = url;
-            urlSpan.style.maxWidth = '160px';
-            urlSpan.style.overflow = 'hidden';
-            urlSpan.style.textOverflow = 'ellipsis';
-            urlSpan.style.whiteSpace = 'nowrap';
-            itemElement.appendChild(nameSpan);
-            itemElement.appendChild(urlSpan);
-            itemElement.dataset.index = index;
-            itemElement.addEventListener('click', (e) => selectItem(e, index));
-            itemElement.addEventListener('dblclick', () => {
-                renamingItemIndex = index;
-                renderItems();
-            });
-            
-            if (selectedItems.has(index)) {
-                itemElement.classList.add('selected');
-            }
-        }
-        itemsList.appendChild(itemElement);
-    });
-}
-
-function selectItem(event, index) {
-    const item = selectedGroupItems[index];
-    if (!item) return;
-    
-    if (event.ctrlKey) {
-        
-        const itemElement = event.target;
-        itemElement.classList.toggle('selected');
-        if (itemElement.classList.contains('selected')) {
-            selectedItems.add(index);
-        } else {
-            selectedItems.delete(index);
-        }
-        updateDeleteButtonsState();
-        return;
-    } else if (event.shiftKey) {
-        
-        const items = Array.from(itemsList.children);
-        const startIndex = items.findIndex(item => item.classList.contains('active'));
-        const endIndex = index;
-        
-        const [start, end] = [Math.min(startIndex, endIndex), Math.max(startIndex, endIndex)];
-        
-        for (let i = start; i <= end; i++) {
-            items[i].classList.add('selected');
-            selectedItems.add(i);
-        }
-        updateDeleteButtonsState();
-        return;
-    }
-    
-    
-    selectedItems.clear();
-    selectedItems.add(index);
-    
-    
-    Array.from(itemsList.children).forEach((el, i) => {
-        el.classList.toggle('active', i === index);
-        el.classList.toggle('selected', selectedItems.has(i));
-    });
-    
-    
-    itemIndexInput.value = index;
-    itemNameInput.value = item.name || '';
-    itemUrlInput.value = item.url || '';
-    itemTvgIdInput.value = item.tvgId || '';
-    itemTvgNameInput.value = item.tvgName || '';
-    itemTvgLogoInput.value = item.tvgLogo || '';
-    updateItemGroupTitleDropdown(item.groupTitle || '');
-    updateItemUrlPreview(item.url || '');
-    
-    updateDeleteButtonsState();
-}
-
-function saveItemChanges(e) {
-    e.preventDefault();
-    
-    const index = parseInt(itemIndexInput.value);
-    if (isNaN(index) || index < 0 || index >= selectedGroupItems.length) return;
-    
-    const item = selectedGroupItems[index];
-    
-    
-    item.name = itemNameInput.value;
-    item.url = itemUrlInput.value;
-    item.tvgId = itemTvgIdInput.value;
-    item.tvgName = itemTvgNameInput.value;
-    item.tvgLogo = itemTvgLogoInput.value;
-    
-    const oldGroup = item.groupTitle;
-    item.groupTitle = itemGroupTitleInput.value;
-    
-    
-    const globalIndex = m3uData.findIndex(i => i === selectedGroupItems[index]);
-    if (globalIndex !== -1) {
-        m3uData[globalIndex] = { ...item };
-    }
-    
-    
-    if (oldGroup !== item.groupTitle) {
-        selectedGroup = item.groupTitle;
-        renderGroups();
-    } else {
-        renderItems();
-    }
-    
-    saveToLocalStorage();
-}
-
-function sortItemsAlphabetically() {
-    if (!selectedGroup) return;
-    
-    const groupItems = m3uData.filter(item => item.groupTitle === selectedGroup);
-    groupItems.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    
-    
-    m3uData = m3uData.filter(item => item.groupTitle !== selectedGroup);
-    
-    
-    m3uData = [...m3uData, ...groupItems];
-    
-    renderItems();
-    saveToLocalStorage();
-}
-
-function updateGroupsOrder(evt) {
-    if (!evt) return;
-    
-    let allGroups = [...new Set(m3uData.map(item => item.groupTitle || 'No Group'))];
-    let filteredGroups = allGroups;
-    if (groupsFilterValue) {
-        filteredGroups = allGroups.filter(g => g.toLowerCase().includes(groupsFilterValue));
-    }
-    
-    
-    const draggedGroup = filteredGroups[evt.oldIndex];
-    
-    if (selectedItems.size <= 1) {
-        
-        const dropGroup = filteredGroups[evt.newIndex];
-        const from = allGroups.indexOf(draggedGroup);
-        let to = allGroups.indexOf(dropGroup);
-        if (to === -1) to = allGroups.length - 1;
-        
-        allGroups.splice(from, 1);
-        allGroups.splice(to, 0, draggedGroup);
-    } else {
-        
-        const selectedGroupNames = Array.from(selectedItems);
-        const selectedIndices = filteredGroups.map((g, i) => selectedGroupNames.includes(g) ? i : -1).filter(i => i !== -1);
-        
-        
-        let remainingGroups = filteredGroups.filter(g => !selectedGroupNames.includes(g));
-        
-        
-        let insertAt = evt.newIndex;
-        if (insertAt > Math.min(...selectedIndices)) {
-            
-            insertAt = insertAt - selectedIndices.filter(i => i < insertAt).length + 1;
-        }
-        
-        
-        filteredGroups = [
-            ...remainingGroups.slice(0, insertAt),
-            ...selectedGroupNames,
-            ...remainingGroups.slice(insertAt)
-        ];
-        
-        
-        allGroups = filteredGroups;
-    }
-    
-    
-    const newData = [];
-    allGroups.forEach(groupName => {
-        const groupItems = m3uData.filter(item => item.groupTitle === groupName);
-        newData.push(...groupItems);
-    });
-    
-    m3uData = newData;
-    
-    
-    if (selectedItems.size > 1) {
-        selectedGroup = Array.from(selectedItems)[0];
-    } else {
-        selectedGroup = draggedGroup;
-    }
-    
-    saveToLocalStorage();
-    renderGroups();
-}
-
-
 
 function generateM3U() {
-    let result = '#EXTM3U\n';
-    
-    m3uData.forEach(item => {
-        let extinf = '#EXTINF:-1';
-        if (item.tvgId) extinf += ` tvg-id="${item.tvgId}"`;
-        if (item.tvgName) extinf += ` tvg-name="${item.tvgName}"`;
-        if (item.tvgLogo) extinf += ` tvg-logo="${item.tvgLogo}"`;
-        if (item.groupTitle) extinf += ` group-title="${item.groupTitle}"`;
-        extinf += `,${item.name}`;
-        
-        result += extinf + '\n' + item.url + '\n';
+    syncGroupOrder();
+    const header = (playlistHeaderInput.value || '#EXTM3U').trim() || '#EXTM3U';
+    playlistHeader = header.toUpperCase().startsWith('#EXTM3U') ? header : `#EXTM3U ${header}`;
+
+    const lines = [playlistHeader];
+    const orderedItems = [];
+    groupOrder.forEach(group => {
+        orderedItems.push(...getGroupItems(group));
     });
-    
-    return result;
+
+    orderedItems.forEach(item => {
+        ensureItem(item);
+        lines.push(buildExtinfLine(item));
+        item.extraLines.forEach(extraLine => lines.push(extraLine));
+        lines.push(item.url || '');
+    });
+
+    return `${lines.join('\n')}\n`;
 }
 
 function downloadM3U() {
     const content = generateM3U();
     const blob = new Blob([content], { type: 'application/x-mpegurl' });
     const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'playlist.m3u';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'playlist.m3u';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     URL.revokeObjectURL(url);
 }
 
-function saveToLocalStorage() {
-    localStorage.setItem('m3uData', JSON.stringify(m3uData));
+function saveCurrentItemFromForm() {
+    const itemId = itemIndexInput.value;
+    const item = m3uData.find(entry => entry._id === itemId);
+    if (!item) return null;
+
+    const oldGroup = getItemGroup(item);
+    const oldUrl = item.url || '';
+    const newGroup = ensureGroupExists(itemGroupTitleInput.value || selectedGroup || NO_GROUP);
+
+    item.name = itemNameInput.value.trim() || 'Unnamed';
+    item.url = itemUrlInput.value.trim();
+    if (item.url !== oldUrl) {
+        item.status = STATUS_UNKNOWN;
+        item.statusDetail = '';
+        item.lastChecked = '';
+    }
+    item.tvgId = itemTvgIdInput.value.trim();
+    item.tvgName = itemTvgNameInput.value.trim();
+    item.tvgLogo = itemTvgLogoInput.value.trim();
+    item.groupTitle = newGroup;
+    item.catchup = itemCatchupInput.value.trim();
+    item.catchupType = itemCatchupTypeInput.value.trim();
+    item.catchupDays = itemCatchupDaysInput.value.trim();
+    item.additionalAttributes = buildAdditionalAttributes({ additionalAttributes: itemAdditionalAttrsInput.value.trim() });
+
+    if (oldGroup !== newGroup) {
+        selectedGroup = newGroup;
+        selectedGroups = new Set([newGroup]);
+        groupSelectionAnchor = newGroup;
+    }
+
+    selectedChannels = new Set([item._id]);
+    activeChannelId = item._id;
+    itemSelectionAnchorId = item._id;
+    rebuildDataByGroupOrder();
+    return item;
 }
 
-function loadFromLocalStorage() {
-    const savedData = localStorage.getItem('m3uData');
-    if (savedData) {
-        m3uData = JSON.parse(savedData);
-        if (m3uData.length > 0) {
-            renderGroups();
-            downloadBtn.disabled = false;
-        }
-    }
-}
+function saveItemChanges(event) {
+    event.preventDefault();
 
-loadFromLocalStorage();
+    const item = saveCurrentItemFromForm();
+    if (!item) return;
 
-function updateItemGroupTitleDropdown(selectedValue) {
-    const groups = [...new Set(m3uData.map(item => item.groupTitle || 'No Group'))];
-    itemGroupTitleDropdownMenu.innerHTML = '';
-    groups.forEach(group => {
-        const li = document.createElement('li');
-        const a = document.createElement('a');
-        a.className = 'dropdown-item';
-        a.href = '#';
-        a.textContent = group;
-        a.addEventListener('click', (e) => {
-            e.preventDefault();
-            itemGroupTitleSelected.textContent = group;
-            itemGroupTitleInput.value = group;
-        });
-        li.appendChild(a);
-        itemGroupTitleDropdownMenu.appendChild(li);
-    });
-    
-    if (selectedValue) {
-        itemGroupTitleSelected.textContent = selectedValue;
-        itemGroupTitleInput.value = selectedValue;
-    } else if (groups.length > 0) {
-        itemGroupTitleSelected.textContent = groups[0];
-        itemGroupTitleInput.value = groups[0];
-    } else {
-        itemGroupTitleSelected.textContent = 'No Group';
-        itemGroupTitleInput.value = 'No Group';
-    }
-}
-
-function saveGroupRename(oldName, newName) {
-    if (!newName.trim() || oldName === newName) {
-        renamingGroup = null;
-        renderGroups();
-        return;
-    }
-    m3uData.forEach(item => {
-        if (item.groupTitle === oldName) item.groupTitle = newName;
-    });
-    renamingGroup = null;
-    if (selectedGroup === oldName) selectedGroup = newName;
     saveToLocalStorage();
     renderGroups();
-}
-
-function saveItemRename(index, newName) {
-    if (!newName.trim()) {
-        renamingItemIndex = null;
-        renderItems();
-        return;
-    }
-    selectedGroupItems[index].name = newName;
-    const globalIndex = m3uData.findIndex(i => i === selectedGroupItems[index]);
-    if (globalIndex !== -1) {
-        m3uData[globalIndex].name = newName;
-    }
-    renamingItemIndex = null;
-    saveToLocalStorage();
     renderItems();
 }
 
-const itemUrlPreview = document.getElementById('itemUrlPreview');
-
-function updateItemUrlPreview(url) {
-    if (!url) {
-        itemUrlPreview.href = '#';
-        itemUrlPreview.classList.add('disabled');
-        itemUrlPreview.setAttribute('tabindex', '-1');
-    } else {
-        itemUrlPreview.href = url;
-        itemUrlPreview.classList.remove('disabled');
-        itemUrlPreview.removeAttribute('tabindex');
-    }
+function saveToLocalStorage() {
+    playlistHeader = (playlistHeaderInput.value || playlistHeader || '#EXTM3U').trim() || '#EXTM3U';
+    syncGroupOrder();
+    setStorageItem(STORAGE_KEY, JSON.stringify({
+        playlistHeader,
+        groupOrder,
+        m3uData
+    }));
+    setStorageItem(LEGACY_DATA_KEY, JSON.stringify(m3uData));
+    setStorageItem(LEGACY_HEADER_KEY, playlistHeader);
 }
-itemUrlInput.addEventListener('input', (e) => {
-    updateItemUrlPreview(e.target.value);
+
+function loadFromLocalStorage() {
+    const savedProject = getStorageItem(STORAGE_KEY);
+    const legacyData = getStorageItem(LEGACY_DATA_KEY);
+    const legacyHeader = getStorageItem(LEGACY_HEADER_KEY);
+
+    try {
+        if (savedProject) {
+            const parsed = JSON.parse(savedProject);
+            playlistHeader = parsed.playlistHeader || '#EXTM3U';
+            groupOrder = Array.isArray(parsed.groupOrder) ? parsed.groupOrder : [];
+            m3uData = Array.isArray(parsed.m3uData) ? parsed.m3uData.map(ensureItem) : [];
+        } else if (legacyData) {
+            playlistHeader = legacyHeader || '#EXTM3U';
+            m3uData = JSON.parse(legacyData).map(ensureItem);
+            groupOrder = uniqueList(m3uData.map(getItemGroup));
+        }
+    } catch (error) {
+        console.error('Could not load saved playlist:', error);
+        playlistHeader = '#EXTM3U';
+        m3uData = [];
+        groupOrder = [];
+    }
+
+    playlistHeaderInput.value = playlistHeader;
+    syncGroupOrder();
+
+    if (groupOrder.length) {
+        selectedGroup = groupOrder[0];
+        selectedGroups = new Set([selectedGroup]);
+        groupSelectionAnchor = selectedGroup;
+    }
+
+    renderGroups();
+    renderItems();
+}
+
+function clearProject() {
+    if (!confirm('Are you sure you want to clear this playlist? This cannot be undone.')) return;
+
+    m3uData = [];
+    groupOrder = [];
+    playlistHeader = '#EXTM3U';
+    selectedGroup = null;
+    selectedGroups.clear();
+    selectedChannels.clear();
+    activeChannelId = null;
+    renamingGroup = null;
+    renamingItemId = null;
+    playlistHeaderInput.value = playlistHeader;
+    removeStorageItem(STORAGE_KEY);
+    removeStorageItem(LEGACY_DATA_KEY);
+    removeStorageItem(LEGACY_HEADER_KEY);
+    fileInput.value = '';
+    renderGroups();
+    renderItems();
+}
+
+const SortableClass = window.Sortable || function() {};
+
+const groupsSortable = new SortableClass(groupsList, {
+    animation: 150,
+    onStart(evt) {
+        const group = evt.item.dataset.groupName;
+        if (!selectedGroups.has(group)) {
+            selectedGroups = new Set([group]);
+            selectedGroup = group;
+            groupSelectionAnchor = group;
+            selectedChannels.clear();
+            activeChannelId = null;
+        }
+        evt.item.classList.add('dragging-selected');
+    },
+    onEnd(evt) {
+        evt.item.classList.remove('dragging-selected');
+        updateGroupsOrder(evt);
+    },
+    onChoose() {
+        if (window.getSelection) window.getSelection().removeAllRanges();
+    }
 });
-itemUrlPreview.addEventListener('click', (e) => {
-    if (!itemUrlInput.value) e.preventDefault();
+
+const itemsSortable = new SortableClass(itemsList, {
+    animation: 150,
+    onStart(evt) {
+        const itemId = evt.item.dataset.itemId;
+        if (!selectedChannels.has(itemId)) {
+            selectedChannels = new Set([itemId]);
+            activeChannelId = itemId;
+            itemSelectionAnchorId = itemId;
+        }
+        evt.item.classList.add('dragging-selected');
+    },
+    onEnd(evt) {
+        evt.item.classList.remove('dragging-selected');
+        updateItemsOrder(evt);
+    },
+    onChoose() {
+        if (window.getSelection) window.getSelection().removeAllRanges();
+    }
 });
+
+fileInput.addEventListener('change', handleFileUpload);
+downloadBtn.addEventListener('click', downloadM3U);
+clearBtn.addEventListener('click', clearProject);
+playlistHeaderInput.addEventListener('input', () => {
+    playlistHeader = playlistHeaderInput.value.trim() || '#EXTM3U';
+    saveToLocalStorage();
+});
+
+groupsFilterInput.addEventListener('input', event => {
+    groupsFilterValue = event.target.value.toLowerCase();
+    renderGroups();
+});
+
+itemsFilterInput.addEventListener('input', event => {
+    itemsFilterValue = event.target.value.toLowerCase();
+    selectedChannels.clear();
+    activeChannelId = null;
+    renderItems();
+});
+
+newGroupBtn.addEventListener('click', createNewGroup);
+renameGroupBtn.addEventListener('click', startSelectedGroupRename);
+sortGroupsBtn.addEventListener('click', sortGroupsAlphabetically);
+deleteGroupsBtn.addEventListener('click', deleteSelectedGroups);
+
+newItemBtn.addEventListener('click', createNewItem);
+renameItemBtn.addEventListener('click', startSelectedItemRename);
+sortItemsBtn.addEventListener('click', sortItemsAlphabetically);
+checkItemsBtn.addEventListener('click', checkChannels);
+if (checkCurrentItemBtn) checkCurrentItemBtn.addEventListener('click', checkCurrentItem);
+deleteItemsBtn.addEventListener('click', deleteSelectedItems);
+itemDetailsForm.addEventListener('submit', saveItemChanges);
+
+itemUrlInput.addEventListener('input', event => updateItemUrlPreview(event.target.value));
+itemUrlPreview.addEventListener('click', event => {
+    if (!itemUrlInput.value) event.preventDefault();
+});
+
+loadFromLocalStorage();

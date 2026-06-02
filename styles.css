@@ -8,8 +8,16 @@ body {
     box-shadow: none !important;
 }
 
+.app-header {
+    min-height: 60px;
+}
+
+.app-meta {
+    min-width: 230px;
+}
+
 .list-group-item {
-    padding: 0.4rem 0.75rem;
+    padding: 0.45rem 0.75rem;
     cursor: pointer;
     user-select: none;
     border-left: none;
@@ -25,6 +33,91 @@ body {
     background-color: #e9ecef;
     color: #000;
     border-color: #dee2e6;
+    font-weight: 600;
+}
+
+.list-group-item.selected {
+    background-color: #eef3f8;
+}
+
+.list-group-item.active.selected {
+    background-color: #e2e8ef;
+}
+
+.list-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.item-meta {
+    display: inline-block;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.78rem;
+}
+
+
+.channel-main {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 4.8em;
+    padding: 0.1rem 0.35rem;
+    border: 1px solid #ced4da;
+    background: #f8f9fa;
+    color: #495057;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    margin-left: auto;
+}
+
+.status-ok {
+    background: #e9f7ef;
+    border-color: #badbcc;
+    color: #0f5132;
+}
+
+.status-warning {
+    background: #fff3cd;
+    border-color: #ffecb5;
+    color: #664d03;
+}
+
+.status-bad {
+    background: #f8d7da;
+    border-color: #f5c2c7;
+    color: #842029;
+}
+
+.status-checking {
+    background: #cff4fc;
+    border-color: #b6effb;
+    color: #055160;
+}
+
+.status-neutral {
+    background: #f1f3f5;
+    border-color: #dee2e6;
+    color: #495057;
+}
+
+.status-progress {
+    min-height: 1.25rem;
+    color: #6c757d;
+}
+
+.status-legend {
+    line-height: 1.45;
 }
 
 #groupsList, #itemsList {
@@ -46,50 +139,56 @@ body {
     border: 1px solid #dee2e6 !important;
 }
 
-/* Make form elements compact */
 .form-control-sm {
     padding: 0.25rem 0.5rem;
     font-size: 0.875rem;
     line-height: 1.5;
 }
 
-/* Ensure form labels don't wrap */
 .col-form-label {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* Add some spacing between sections */
 .row > div {
     margin-bottom: 5px;
 }
 
-/* Style for selected items */
-.list-group-item.selected {
-    background-color: #e9ecef;
+.section-hint {
+    line-height: 1.25;
 }
 
-/* Style for items being dragged */
-.list-group-item.dragging-selected {
-    opacity: 0.5;
-    background-color: #d1e7ff;
+.dragging-selected {
+    opacity: 0.6;
+    background-color: #dbeafe !important;
 }
 
-/* Visual feedback for drop target */
 .sortable-drag {
     opacity: 1 !important;
     background-color: #f8f9fa;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 
-/* Visual feedback for drop placeholder */
 .sortable-ghost {
     opacity: 0.5;
     background: #c8ebfb;
 }
 
-/* Custom scrollbar */
+#itemUrlPreview.disabled {
+    color: #adb5bd;
+    pointer-events: none;
+}
+
+.dropdown-menu {
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+textarea.form-control-sm {
+    min-height: 56px;
+}
+
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -105,4 +204,14 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #555;
+}
+
+@media (max-width: 992px) {
+    .app-header {
+        flex-direction: column;
+    }
+
+    .app-meta {
+        text-align: left !important;
+    }
 }
