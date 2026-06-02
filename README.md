@@ -9,6 +9,9 @@ Open a playlist, organize groups and channels, edit channel details, check strea
 
 🔗 **Live**: [https://arazgholami.github.io/awesome-m3u-editor/](https://arazgholami.github.io/awesome-m3u-editor/)
 
+## Screenshot
+![screenshot](screenshot.png "Awesome M3U Editor 2.0")
+
 ## Main features
 
 - Open `.m3u` and `.m3u8` playlists
