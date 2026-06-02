@@ -1405,6 +1405,13 @@ function generateM3U() {
 }
 
 function downloadM3U() {
+    if (activeChannelId) {
+        saveCurrentItemFromForm();
+        saveToLocalStorage();
+        renderGroups();
+        renderItems();
+    }
+
     const content = generateM3U();
     const blob = new Blob([content], { type: 'application/x-mpegurl' });
     const url = URL.createObjectURL(blob);
