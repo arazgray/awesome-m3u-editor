@@ -72,6 +72,7 @@ const itemsList = document.getElementById('itemsList');
 const itemsFilterInput = document.getElementById('itemsFilterInput');
 const newItemBtn = document.getElementById('newItemBtn');
 const renameItemBtn = document.getElementById('renameItemBtn');
+const cloneItemBtn = document.getElementById('cloneItemBtn');
 const sortItemsBtn = document.getElementById('sortItemsBtn');
 const sortItemsAzBtn = document.getElementById('sortItemsAzBtn');
 const sortItemsStatusBtn = document.getElementById('sortItemsStatusBtn');
@@ -537,6 +538,7 @@ function updateActionState() {
 
     newItemBtn.disabled = !selectedGroup;
     renameItemBtn.disabled = selectedItemCount !== 1;
+    cloneItemBtn.disabled = selectedItemCount !== 1;
     sortItemsBtn.disabled = !selectedGroup || itemCount < 2;
     checkItemsBtn.disabled = isCheckingChannels || selectedItemCount === 0;
     checkItemsBtn.textContent = isCheckingChannels ? 'Checking...' : 'Check';
@@ -944,6 +946,32 @@ function createNewItem() {
         itemNameInput.focus();
         itemNameInput.select();
     }, 0);
+}
+
+function cloneSelectedItem() {
+    if (selectedChannels.size !== 1) return;
+
+    const sourceId = [...selectedChannels][0];
+    const sourceIndex = m3uData.findIndex(item => item._id === sourceId);
+    if (sourceIndex === -1) return;
+
+    const source = m3uData[sourceIndex];
+    const clone = ensureItem({
+        ...source,
+        _id: makeItemId(),
+        name: `${source.name || 'Unnamed'} Copy`,
+        extraLines: Array.isArray(source.extraLines) ? source.extraLines.slice() : []
+    });
+
+    m3uData.splice(sourceIndex + 1, 0, clone);
+    selectedGroup = getItemGroup(clone);
+    selectedGroups = new Set([selectedGroup]);
+    selectedChannels = new Set([clone._id]);
+    activeChannelId = clone._id;
+    itemSelectionAnchorId = clone._id;
+    saveToLocalStorage();
+    renderGroups();
+    renderItems();
 }
 
 function deleteSelectedGroups() {
@@ -1613,6 +1641,7 @@ deleteGroupsBtn.addEventListener('click', deleteSelectedGroups);
 
 newItemBtn.addEventListener('click', createNewItem);
 renameItemBtn.addEventListener('click', startSelectedItemRename);
+cloneItemBtn.addEventListener('click', cloneSelectedItem);
 if (sortItemsAzBtn) sortItemsAzBtn.addEventListener('click', event => {
     event.preventDefault();
     sortItemsAlphabetically();
