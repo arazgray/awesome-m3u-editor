@@ -1,13 +1,13 @@
 # Awesome M3U Editor 2.0
 
-[![GitHub license](https://img.shields.io/github/license/arazgholami/awesome-m3u-editor)](https://github.com/arazgholami/awesome-m3u-editor/blob/main/LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/arazgholami/awesome-m3u-editor)](https://github.com/arazgholami/awesome-m3u-editor/stargazers)
+[![GitHub license](https://img.shields.io/github/license/arazgray/awesome-m3u-editor)](https://github.com/arazgray/awesome-m3u-editor/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/arazgray/awesome-m3u-editor)](https://github.com/arazgray/awesome-m3u-editor/stargazers)
 
 A free, private, browser-based editor for M3U and M3U8 IPTV playlists.
 
 Open a playlist, organize groups and channels, edit channel details, check stream URLs, and download the cleaned playlist. Everything runs in your browser. Your playlist is not uploaded anywhere.
 
-🔗 **Live**: [https://arazgholami.github.io/awesome-m3u-editor/](https://arazgholami.github.io/awesome-m3u-editor/)
+🔗 **Live**: [https://arazgray.github.io/awesome-m3u-editor/](https://arazgray.github.io/awesome-m3u-editor/)
 
 ## Screenshot
 ![screenshot](screenshot.png "Awesome M3U Editor 2.0")
@@ -57,7 +57,7 @@ https://iptv-org.github.io/iptv/index.country.m3u
 ## Run locally
 
 ```bash
-git clone https://github.com/arazgholami/awesome-m3u-editor.git
+git clone https://github.com/arazgray/awesome-m3u-editor.git
 cd awesome-m3u-editor
 ```
 
@@ -77,4 +77,4 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
-Made with ❤️ by [@arazgholami](https://github.com/arazgholami) | [Star on GitHub](https://github.com/arazgholami/awesome-m3u-editor)
+Made with ❤️ by [@arazgray](https://github.com/arazgray) | [Star on GitHub](https://github.com/arazgray/awesome-m3u-editor)
